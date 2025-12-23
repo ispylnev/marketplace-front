@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import { authApi, RegisterRequest } from '../api/auth';
 import { useNavigate, Link } from 'react-router-dom';
+import { User, Phone, Mail, Lock, CheckCircle } from 'lucide-react';
+import logo from '../assets/9f8522ff5c46c241fe026950d295cfdf39fe881b.png';
+import headerBg from '../assets/3ad5f1be4761137284dc7fc853d7818c30549815.png';
+import phoneImage from '../assets/84effd99c3d9e668f86768185911046b6601ef7d.png';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -14,11 +18,13 @@ export default function Register() {
   });
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
+    setSubmitted(false);
 
     try {
       // Подготавливаем данные для отправки: убираем пустые строки для опциональных полей
@@ -33,11 +39,17 @@ export default function Register() {
       
       const response = await authApi.register(dataToSend);
       console.log('Успешная регистрация:', response.user);
+      setSubmitted(true);
+      
       // Обновляем состояние авторизации
       window.dispatchEvent(new Event('auth-change'));
-      // Перенаправляем на главную страницу
-      navigate('/');
+      
+      // Перенаправляем на главную страницу через 2 секунды
+      setTimeout(() => {
+        navigate('/');
+      }, 2000);
     } catch (err: any) {
+      setSubmitted(false);
       // Обработка ошибок валидации Spring Boot
       if (err.response?.data?.errors) {
         // Если есть массив ошибок валидации
@@ -63,131 +75,225 @@ export default function Register() {
     }
   };
 
+  const handleChange = (field: keyof RegisterRequest, value: string) => {
+    setFormData(prev => ({ 
+      ...prev, 
+      [field]: value || (field === 'middleName' || field === 'phone' ? undefined : '') 
+    }));
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8" style={{ position: 'relative', zIndex: 10 }}>
-      <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-lg shadow-lg" style={{ position: 'relative', zIndex: 20 }}>
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Регистрация
-          </h2>
+    <div className="min-h-screen bg-white flex flex-col">
+      {/* Хедер маркетплейса */}
+      <header 
+        className="text-white shadow-lg relative"
+        style={{
+          backgroundImage: `url(${headerBg})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+        }}
+      >
+        <div className="container mx-auto px-4 py-3 flex items-center justify-center relative z-10">
+          <Link to="/">
+            <img src={logo} alt="VEGA" className="h-[94px]" />
+          </Link>
         </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-              {typeof error === 'string' ? error : JSON.stringify(error)}
-            </div>
-          )}
-          <div className="rounded-md shadow-sm space-y-4">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email *
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                required
-                className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                placeholder="email@example.com"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              />
-            </div>
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                Пароль *
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                required
-                minLength={8}
-                className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                placeholder="Минимум 8 символов"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              />
-            </div>
-            <div>
-              <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">
-                Имя *
-              </label>
-              <input
-                id="firstName"
-                name="firstName"
-                type="text"
-                required
-                className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                value={formData.firstName}
-                onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-              />
-            </div>
-            <div>
-              <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">
-                Фамилия *
-              </label>
-              <input
-                id="lastName"
-                name="lastName"
-                type="text"
-                required
-                className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                value={formData.lastName}
-                onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-              />
-            </div>
-            <div>
-              <label htmlFor="middleName" className="block text-sm font-medium text-gray-700">
-                Отчество
-              </label>
-              <input
-                id="middleName"
-                name="middleName"
-                type="text"
-                className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                value={formData.middleName || ''}
-                onChange={(e) => setFormData({ ...formData, middleName: e.target.value || undefined })}
-              />
-            </div>
-            <div>
-              <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
-                Телефон
-              </label>
-              <input
-                id="phone"
-                name="phone"
-                type="tel"
-                className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                placeholder="+79991234567"
-                value={formData.phone || ''}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value || undefined })}
-              />
+      </header>
+
+      {/* Основной контент */}
+      <main className="container mx-auto px-4 pt-4 flex-1 overflow-visible">
+        <div className="max-w-6xl mx-auto grid lg:grid-cols-2 gap-12 items-start">
+          {/* Левая колонка - форма регистрации */}
+          <div className="flex justify-center pt-4">
+            <div className="w-full max-w-[900px] bg-white rounded-lg shadow-lg overflow-hidden border border-[#bccea9]">
+              <div 
+                className="px-3 py-3 text-white relative"
+                style={{
+                  backgroundImage: `url(${headerBg})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                }}
+              >
+                <div className="relative z-10">
+                  <h2 className="text-white mb-1 text-base">Регистрация</h2>
+                  <p className="text-white/90 text-[11px]">Присоединяйтесь к VEGA</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleSubmit} className="p-3 space-y-2">
+                {error && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-[11px]">
+                    {typeof error === 'string' ? error : JSON.stringify(error)}
+                  </div>
+                )}
+
+                {/* Два столбца: левый - ФИО, правый - контакты и пароль */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                  {/* Левый столбец - ФИО */}
+                  <div className="space-y-2">
+                    <div>
+                      <label htmlFor="firstName" className="block text-[#2d2e30] mb-1 text-[11px]">
+                        Имя <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <User className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" />
+                        <input
+                          type="text"
+                          id="firstName"
+                          required
+                          value={formData.firstName}
+                          onChange={(e) => handleChange('firstName', e.target.value)}
+                          className="w-full pl-7 pr-2 py-1 text-[11px] border border-[#bccea9] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2b4a39] focus:border-transparent transition-all placeholder:text-[12px]"
+                          placeholder="Иван"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label htmlFor="lastName" className="block text-[#2d2e30] mb-1 text-[11px]">
+                        Фамилия <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <User className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" />
+                        <input
+                          type="text"
+                          id="lastName"
+                          required
+                          value={formData.lastName}
+                          onChange={(e) => handleChange('lastName', e.target.value)}
+                          className="w-full pl-7 pr-2 py-1 text-[11px] border border-[#bccea9] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2b4a39] focus:border-transparent transition-all placeholder:text-[12px]"
+                          placeholder="Иванов"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label htmlFor="middleName" className="block text-[#2d2e30] mb-1 text-[11px]">
+                        Отчество
+                      </label>
+                      <div className="relative">
+                        <User className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" />
+                        <input
+                          type="text"
+                          id="middleName"
+                          value={formData.middleName || ''}
+                          onChange={(e) => handleChange('middleName', e.target.value)}
+                          className="w-full pl-7 pr-2 py-1 text-[11px] border border-[#bccea9] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2b4a39] focus:border-transparent transition-all placeholder:text-[12px]"
+                          placeholder="Иванович"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Правый столбец - контакты и пароль */}
+                  <div className="space-y-2">
+                    <div>
+                      <label htmlFor="phone" className="block text-[#2d2e30] mb-1 text-[11px]">
+                        Номер телефона
+                      </label>
+                      <div className="relative">
+                        <Phone className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" />
+                        <input
+                          type="tel"
+                          id="phone"
+                          value={formData.phone || ''}
+                          onChange={(e) => handleChange('phone', e.target.value)}
+                          className="w-full pl-7 pr-2 py-1 text-[11px] border border-[#bccea9] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2b4a39] focus:border-transparent transition-all placeholder:text-[12px]"
+                          placeholder="+7 (999) 123-45-67"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label htmlFor="email" className="block text-[#2d2e30] mb-1 text-[11px]">
+                        Email <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <Mail className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" />
+                        <input
+                          type="email"
+                          id="email"
+                          required
+                          value={formData.email}
+                          onChange={(e) => handleChange('email', e.target.value)}
+                          className="w-full pl-7 pr-2 py-1 text-[11px] border border-[#bccea9] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2b4a39] focus:border-transparent transition-all placeholder:text-[12px]"
+                          placeholder="example@mail.ru"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label htmlFor="password" className="block text-[#2d2e30] mb-1 text-[11px]">
+                        Пароль <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <Lock className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" />
+                        <input
+                          type="password"
+                          id="password"
+                          required
+                          minLength={8}
+                          value={formData.password}
+                          onChange={(e) => handleChange('password', e.target.value)}
+                          className="w-full pl-7 pr-2 py-1 text-[11px] border border-[#bccea9] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2b4a39] focus:border-transparent transition-all placeholder:text-[12px]"
+                          placeholder="Минимум 8 символов"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Кнопка */}
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-[#2b4a39] hover:bg-[#1f3529] text-white py-1.5 px-3 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 mt-2.5 text-[11px] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? (
+                    'Регистрация...'
+                  ) : submitted ? (
+                    <>
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      Регистрация успешна!
+                    </>
+                  ) : (
+                    'Зарегистрироваться'
+                  )}
+                </button>
+
+                <p className="text-[9px] text-gray-500 text-center mt-1.5">
+                  Регистрируясь, вы соглашаетесь с условиями использования и политикой конфиденциальности
+                </p>
+
+                <div className="text-center mt-2">
+                  <Link
+                    to="/login"
+                    className="font-medium text-[#2b4a39] hover:text-[#1f3529] text-[11px]"
+                  >
+                    Уже есть аккаунт? Войти
+                  </Link>
+                </div>
+              </form>
             </div>
           </div>
 
-          <div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-              style={{ pointerEvents: loading ? 'none' : 'auto' }}
-            >
-              {loading ? 'Регистрация...' : 'Зарегистрироваться'}
-            </button>
+          {/* Правая колонка - изображение телефона */}
+          <div className="hidden lg:flex items-end justify-start overflow-visible relative">
+            <img 
+              src={phoneImage} 
+              alt="VEGA Mobile App" 
+              className="w-full max-w-lg h-auto object-contain object-bottom drop-shadow-2xl"
+            />
           </div>
+        </div>
+      </main>
 
-          <div className="text-center">
-            <Link
-              to="/login"
-              className="font-medium text-green-600 hover:text-green-500"
-            >
-              Уже есть аккаунт? Войти
-            </Link>
-          </div>
-        </form>
-      </div>
+      {/* Футер */}
+      <footer className="bg-[#2d2e30] text-white py-8">
+        <div className="container mx-auto px-4 text-center">
+          <p className="text-white/70 text-sm">© 2025 VEGA. Все права защищены.</p>
+        </div>
+      </footer>
     </div>
   );
 }
-
