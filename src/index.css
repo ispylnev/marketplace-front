@@ -4,12 +4,57 @@
 @tailwind components;
 @tailwind utilities;
 
-@import './styles/globals.css';
+/* Custom properties from globals.css */
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --font-size: 16px;
+  --background: #ffffff;
+  --foreground: #2D2E30;
+  --card: #ffffff;
+  --card-foreground: #2D2E30;
+  --popover: oklch(1 0 0);
+  --popover-foreground: #2D2E30;
+  --primary: #2B4A39;
+  --primary-foreground: #ffffff;
+  --secondary: #BCCEA9;
+  --secondary-foreground: #2D2E30;
+  --muted: #ececf0;
+  --muted-foreground: #717182;
+  --accent: #BCCEA9;
+  --accent-foreground: #2D2E30;
+  --destructive: #d4183d;
+  --destructive-foreground: #ffffff;
+  --border: rgba(0, 0, 0, 0.1);
+  --input: transparent;
+  --input-background: #f3f3f5;
+  --switch-background: #cbced4;
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  --ring: #2B4A39;
+  --radius: 0.625rem;
+  
+  /* Vega custom colors */
+  --vega-white: #FFFFFF;
+  --vega-sage: #BCCEA9;
+  --vega-dark-green: #2B4A39;
+  --vega-charcoal: #2D2E30;
+}
+
+html {
+  font-size: var(--font-size);
+}
 
 @layer base {
+  * {
+    border-color: var(--border);
+  }
+
   body {
     @apply bg-white text-[#2D2E30] font-sans antialiased;
     font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 

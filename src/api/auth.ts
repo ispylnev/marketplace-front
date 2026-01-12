@@ -29,6 +29,10 @@ export interface UserInfo {
   lastName: string;
   middleName?: string;
   roles: string[];
+  avatarUrl?: string;
+  avatarInitials?: string;
+  avatarBackgroundColor?: string;
+  hasCustomAvatar?: boolean;
 }
 
 export interface AuthResponse {
