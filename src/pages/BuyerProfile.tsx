@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Star, MessageCircle, Package, MessageSquare, Heart, Users, 
-  Settings, FileText, LogOut, Flag, Edit, Camera, Trash2, Upload
+  Settings, FileText, LogOut, Flag, Edit, Camera, Trash2, Upload,
+  LayoutDashboard, Store
 } from "lucide-react";
 import { ProfileMenuItem } from "../components/ProfileMenuItem";
 import { PlantCollection } from "../components/PlantCollection";
@@ -46,6 +47,7 @@ const BuyerProfile = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<UserInfo | null>(null);
   const [profile, setProfile] = useState<UserProfileResponse | null>(null);
+  const [sellerId, setSellerId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [avatarDialogOpen, setAvatarDialogOpen] = useState(false);
@@ -85,6 +87,16 @@ const BuyerProfile = () => {
           middleName: userResponse.data.middleName || '',
           phone: userResponse.data.phone || ''
         });
+      }
+
+      // Если пользователь - продавец, загружаем его sellerId
+      if (userResponse.data.roles && userResponse.data.roles.includes('SELLER')) {
+        try {
+          const sellerResponse = await api.get('/api/sellers/me');
+          setSellerId(sellerResponse.data.id);
+        } catch (error) {
+          console.error('Ошибка загрузки данных продавца:', error);
+        }
       }
     } catch (error) {
       console.error('Ошибка загрузки профиля:', error);
@@ -439,6 +451,23 @@ const BuyerProfile = () => {
             {/* Настройки и дополнительно */}
             <div className="py-2">
               <ProfileMenuItem icon={Settings} label="Настройки" />
+              {/* Показываем панель управления и ссылку на магазин только для продавцов */}
+              {user.roles && user.roles.includes('SELLER') && (
+                <>
+                  <ProfileMenuItem 
+                    icon={LayoutDashboard} 
+                    label="Панель управления" 
+                    onClick={() => navigate('/seller/admin')}
+                  />
+                  {sellerId && (
+                    <ProfileMenuItem 
+                      icon={Store} 
+                      label="Мой магазин" 
+                      onClick={() => navigate(`/seller/${sellerId}`)}
+                    />
+                  )}
+                </>
+              )}
               <ProfileMenuItem icon={FileText} label="Оферта" />
               <ProfileMenuItem icon={LogOut} label="Выход" onClick={handleLogout} />
             </div>

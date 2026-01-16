@@ -34,15 +34,12 @@ const Profile = () => {
     }
   };
 
-  // Перенаправляем на соответствующий профиль
+  // Перенаправляем на личный профиль (для всех пользователей, включая продавцов)
   useEffect(() => {
     if (user && !loading) {
-      const isSeller = user.roles && user.roles.includes('SELLER');
-      if (isSeller) {
-        navigate('/profile/seller', { replace: true });
-      } else {
-        navigate('/profile/buyer', { replace: true });
-      }
+      // Всегда перенаправляем на личный профиль
+      // Продавцы увидят там кнопку "Панель управления" и ссылку на свой магазин
+      navigate('/profile/buyer', { replace: true });
     }
   }, [user, loading, navigate]);
 

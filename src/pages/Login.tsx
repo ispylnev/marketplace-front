@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { authApi, LoginRequest } from '../api/auth';
 import { useNavigate, Link } from 'react-router-dom';
 import { tokenManager } from '../api/client';
+import { ErrorAlert } from '../components/ui/ErrorAlert';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -9,12 +10,12 @@ export default function Login() {
     email: '',
     password: '',
   });
-  const [error, setError] = useState<string>('');
+  const [error, setError] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setError(null);
     setLoading(true);
 
     try {
@@ -25,7 +26,7 @@ export default function Login() {
       // Перенаправляем на главную страницу
       navigate('/');
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Ошибка входа. Проверьте email и пароль.');
+      setError(err);
     } finally {
       setLoading(false);
     }
@@ -40,11 +41,11 @@ export default function Login() {
           </h2>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-              {error}
-            </div>
-          )}
+          <ErrorAlert
+            error={error}
+            onClose={() => setError(null)}
+            closable={true}
+          />
           <div className="rounded-md shadow-sm -space-y-px">
             <div>
               <label htmlFor="email" className="sr-only">

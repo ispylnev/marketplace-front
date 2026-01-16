@@ -5,6 +5,7 @@ import { User, Phone, Mail, Lock, CheckCircle } from 'lucide-react';
 import logo from '../assets/9f8522ff5c46c241fe026950d295cfdf39fe881b.png';
 import headerBg from '../assets/3ad5f1be4761137284dc7fc853d7818c30549815.png';
 import phoneImage from '../assets/84effd99c3d9e668f86768185911046b6601ef7d.png';
+import { ErrorAlert } from '../components/ui/ErrorAlert';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -16,13 +17,13 @@ export default function Register() {
     middleName: undefined,
     phone: undefined,
   });
-  const [error, setError] = useState<string>('');
+  const [error, setError] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setError(null);
     setLoading(true);
     setSubmitted(false);
 
@@ -50,26 +51,7 @@ export default function Register() {
       }, 2000);
     } catch (err: any) {
       setSubmitted(false);
-      // Обработка ошибок валидации Spring Boot
-      if (err.response?.data?.errors) {
-        // Если есть массив ошибок валидации
-        const validationErrors = err.response.data.errors;
-        if (Array.isArray(validationErrors)) {
-          setError(validationErrors.map((e: any) => e.defaultMessage || e.message).join(', '));
-        } else if (typeof validationErrors === 'object') {
-          // Если ошибки в виде объекта {field: [messages]}
-          const errorMessages = Object.values(validationErrors).flat().join(', ');
-          setError(errorMessages);
-        } else {
-          setError(validationErrors);
-        }
-      } else if (err.response?.data?.message) {
-        setError(err.response.data.message);
-      } else if (err.message) {
-        setError(err.message);
-      } else {
-        setError('Ошибка регистрации. Попробуйте еще раз.');
-      }
+      setError(err);
     } finally {
       setLoading(false);
     }
@@ -121,11 +103,12 @@ export default function Register() {
               </div>
 
               <form onSubmit={handleSubmit} className="p-3 space-y-2">
-                {error && (
-                  <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-[11px]">
-                    {typeof error === 'string' ? error : JSON.stringify(error)}
-                  </div>
-                )}
+                <ErrorAlert
+                  error={error}
+                  className="mb-2"
+                  onClose={() => setError(null)}
+                  closable={true}
+                />
 
                 {/* Два столбца: левый - ФИО, правый - контакты и пароль */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">

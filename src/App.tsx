@@ -9,6 +9,7 @@ import Register from './pages/Register';
 import Profile from './pages/Profile';
 import BuyerProfile from './pages/BuyerProfile';
 import SellerProfile from './pages/SellerProfile';
+import SellerAdmin from './pages/SellerAdmin';
 import RegisterStore from './pages/RegisterStore';
 
 // Layout компонент для страниц с Header/Footer
@@ -39,7 +40,8 @@ function App() {
         <Route path="/product/:id" element={<Layout><ProductDetail /></Layout>} />
         <Route path="/profile" element={<Layout><Profile /></Layout>} />
         <Route path="/profile/buyer" element={<BuyerProfile />} />
-        <Route path="/profile/seller" element={<SellerProfile />} />
+        <Route path="/seller/:sellerId" element={<SellerProfile />} />
+        <Route path="/seller/admin" element={<SellerAdmin />} />
       </Routes>
     </BrowserRouter>
   );
