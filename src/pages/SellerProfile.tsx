@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Star, MessageCircle, ShoppingCart, Package, MessageSquare, Heart, Users, Settings, FileText, LogOut, Flag, MapPin, Clock, Truck } from "lucide-react";
 import { ProfileMenuItem } from "../components/ProfileMenuItem";
 import Header from "../components/Header";
 import { Separator } from "../components/ui/separator";
 import { Button } from "../components/ui/button";
-import api, { tokenManager } from '../api/client';
+import { sellerService } from '../api/sellerService';
+import { SellerResponse } from '../types/seller';
 import profileAvatar from '../assets/c5c335b900c25c01ebdade434d4ee2ee9ce87b4b.png';
 import avatarBackground from '../assets/4068108bae8ada353e34675c0c754fb530d30e98.png';
 // Используем существующие изображения для товаров
@@ -16,41 +17,53 @@ import rosesImage from '../assets/fc77825ae35f7b3de820d7b8519acd36b843b53b.png';
 import orchidsImage from '../assets/a3565728ee756ad8a73b7c0ef749167ad0757842.png';
 import ficusImage from '../assets/a522e10182dc3cfa749b0aebde64f00ccca7991d.png';
 
-interface UserInfo {
-  id: number;
-  email: string;
-  phone?: string;
-  firstName: string;
-  lastName: string;
-  middleName?: string;
-  roles: string[];
-}
-
 const SellerProfile = () => {
   const navigate = useNavigate();
-  const [user, setUser] = useState<UserInfo | null>(null);
+  const { sellerId } = useParams<{ sellerId: string }>();
+  const [seller, setSeller] = useState<SellerResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadUserProfile();
-  }, []);
+    loadSellerProfile();
+  }, [sellerId]);
 
-  const loadUserProfile = async () => {
+  const loadSellerProfile = async () => {
+    if (!sellerId) {
+      setLoading(false);
+      return;
+    }
+
     try {
-      const response = await api.get('/api/users/me');
-      setUser(response.data);
+      // Загружаем данные продавца по ID через API сервис
+      const sellerData = await sellerService.getSeller(parseInt(sellerId));
+      setSeller(sellerData);
     } catch (error) {
-      console.error('Ошибка загрузки профиля:', error);
-      navigate('/login');
+      console.error('Ошибка загрузки профиля продавца:', error);
+      // ВРЕМЕННО: моковые данные для верстки
+      setSeller({
+        id: parseInt(sellerId || '1'),
+        userId: 1,
+        shopName: 'Питомник Ситцевый Сад',
+        legalName: 'ООО "Ситцевый Сад"',
+        companyType: 'LLC',
+        inn: '1234567890',
+        contactEmail: 'info@sitcevysad.ru',
+        contactPhone: '+7 (495) 123-45-67',
+        description: 'Специализируемся на выращивании редких сортов ирисов и многолетников. Все растения выращены с любовью в экологически чистых условиях.',
+        logoUrl: profileAvatar,
+        status: 'APPROVED' as any,
+        rating: 4.8,
+        reviewCount: 24,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        canCreateOffers: true,
+        avatarInitials: 'ПС',
+        avatarBackgroundColor: '#BCCEA9',
+        hasCustomLogo: true
+      });
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleLogout = () => {
-    tokenManager.clearToken();
-    window.dispatchEvent(new Event('auth-change'));
-    navigate('/');
   };
 
   if (loading) {
@@ -64,16 +77,16 @@ const SellerProfile = () => {
     );
   }
 
-  if (!user) {
+  if (!seller) {
     return null;
   }
 
-  const userProfile = {
-    name: `${user.firstName} ${user.lastName}`,
-    avatar: profileAvatar,
-    rating: 4.8,
-    reviewsCount: 24,
-    description: "Специализируемся на выращивании редких сортов ирисов и многолетников. Все растения выращены с любовью в экологически чистых условиях.",
+  const sellerProfile = {
+    name: seller.shopName,
+    avatar: seller.logoUrl || profileAvatar,
+    rating: seller.rating || 4.8,
+    reviewsCount: seller.reviewCount || 24,
+    description: seller.description || "Специализируемся на выращивании редких сортов ирисов и многолетников. Все растения выращены с любовью в экологически чистых условиях.",
     city: "Москва",
     minOrderAmount: 1500,
     workingHours: "Пн-Сб: 9:00 - 18:00",
@@ -147,21 +160,21 @@ const SellerProfile = () => {
                 {/* Фото */}
                 <div className="relative flex-shrink-0">
                   <img 
-                    src={userProfile.avatar} 
-                    alt={userProfile.name}
+                    src={sellerProfile.avatar} 
+                    alt={sellerProfile.name}
                     className="w-20 h-20 md:w-36 md:h-36 rounded-full border-4 border-white shadow-lg object-cover"
                   />
                 </div>
                 
                 {/* Никнейм, статус и рейтинг */}
                 <div className="flex flex-col justify-center flex-1 pt-1">
-                  <h1 className="text-white text-lg md:text-2xl font-bold leading-tight">{userProfile.name}</h1>
+                  <h1 className="text-white text-lg md:text-2xl font-bold leading-tight">{sellerProfile.name}</h1>
                   
                   {/* Статус */}
-                  {userProfile.description && (
+                  {sellerProfile.description && (
                     <div className="mt-2 mb-2 md:mt-3 md:mb-4 bg-white/20 backdrop-blur-sm rounded-lg px-2 md:px-3 py-1.5 md:py-2 border border-white/30">
                       <p className="text-white text-xs md:text-sm leading-tight">
-                        {userProfile.description}
+                        {sellerProfile.description}
                       </p>
                     </div>
                   )}
@@ -172,22 +185,22 @@ const SellerProfile = () => {
                       {[...Array(5)].map((_, i) => (
                         <Star
                           key={i}
-                          fill={i < Math.floor(userProfile.rating) ? "#eab308" : "rgba(255,255,255,0.4)"}
+                          fill={i < Math.floor(sellerProfile.rating) ? "#eab308" : "rgba(255,255,255,0.4)"}
                           className={`w-4 h-4 md:w-7 md:h-7 ${
-                            i < Math.floor(userProfile.rating)
+                            i < Math.floor(sellerProfile.rating)
                               ? "text-yellow-500"
                               : "text-white opacity-40"
                           }`}
                           style={
-                            i < Math.floor(userProfile.rating)
+                            i < Math.floor(sellerProfile.rating)
                               ? { filter: "drop-shadow(0 2px 4px rgba(234,179,8,0.6)) drop-shadow(0 1px 2px rgba(0,0,0,0.3))" }
                               : undefined
                           }
                         />
                       ))}
                     </div>
-                    <span className="text-white text-sm md:text-lg font-bold">{userProfile.rating}</span>
-                    <span className="text-[#BCCEA9] text-xs md:text-base">• {userProfile.reviewsCount} отзывов</span>
+                    <span className="text-white text-sm md:text-lg font-bold">{sellerProfile.rating}</span>
+                    <span className="text-[#BCCEA9] text-xs md:text-base">• {sellerProfile.reviewsCount} отзывов</span>
                   </div>
 
                   {/* Кнопки действий */}
@@ -215,7 +228,7 @@ const SellerProfile = () => {
                   <MapPin className="w-4 h-4 md:w-5 md:h-5 text-[#2B4A39] flex-shrink-0 mt-0.5" />
                   <div>
                     <p className="text-[#2D2E30] font-semibold text-sm md:text-base">Локация</p>
-                    <p className="text-[#2D2E30]/70 text-sm md:text-base">{userProfile.city}</p>
+                    <p className="text-[#2D2E30]/70 text-sm md:text-base">{sellerProfile.city}</p>
                   </div>
                 </div>
 
@@ -224,7 +237,7 @@ const SellerProfile = () => {
                   <ShoppingCart className="w-4 h-4 md:w-5 md:h-5 text-[#2B4A39] flex-shrink-0 mt-0.5" />
                   <div>
                     <p className="text-[#2D2E30] font-semibold text-sm md:text-base">Минимальный заказ</p>
-                    <p className="text-[#2D2E30]/70 text-sm md:text-base">{userProfile.minOrderAmount} ₽</p>
+                    <p className="text-[#2D2E30]/70 text-sm md:text-base">{sellerProfile.minOrderAmount} ₽</p>
                   </div>
                 </div>
 
@@ -233,7 +246,7 @@ const SellerProfile = () => {
                   <Clock className="w-4 h-4 md:w-5 md:h-5 text-[#2B4A39] flex-shrink-0 mt-0.5" />
                   <div>
                     <p className="text-[#2D2E30] font-semibold text-sm md:text-base">Часы работы</p>
-                    <p className="text-[#2D2E30]/70 text-sm md:text-base">{userProfile.workingHours}</p>
+                    <p className="text-[#2D2E30]/70 text-sm md:text-base">{sellerProfile.workingHours}</p>
                   </div>
                 </div>
 
@@ -243,7 +256,7 @@ const SellerProfile = () => {
                   <div>
                     <p className="text-[#2D2E30] font-semibold text-sm md:text-base">Заказы</p>
                     <p className="text-[#2D2E30]/70 text-xs md:text-base">
-                      Выполнено: {userProfile.ordersCompleted} • Активных: {userProfile.ordersActive} • Отменено: {userProfile.ordersCancelled}
+                      Выполнено: {sellerProfile.ordersCompleted} • Активных: {sellerProfile.ordersActive} • Отменено: {sellerProfile.ordersCancelled}
                     </p>
                   </div>
                 </div>
@@ -253,13 +266,13 @@ const SellerProfile = () => {
                   <Truck className="w-4 h-4 md:w-5 md:h-5 text-[#2B4A39] flex-shrink-0 mt-0.5" />
                   <div>
                     <p className="text-[#2D2E30] font-semibold text-sm md:text-base">Доставка</p>
-                    <p className="text-[#2D2E30]/70 text-xs md:text-base">{userProfile.deliveryServices.join(", ")}</p>
-                    <p className="text-[#2D2E30]/70 text-xs md:text-sm">Отправка: {userProfile.shippingDays}</p>
+                    <p className="text-[#2D2E30]/70 text-xs md:text-base">{sellerProfile.deliveryServices.join(", ")}</p>
+                    <p className="text-[#2D2E30]/70 text-xs md:text-sm">Отправка: {sellerProfile.shippingDays}</p>
                   </div>
                 </div>
 
                 {/* Самовывоз */}
-                {userProfile.selfPickup && (
+                {sellerProfile.selfPickup && (
                   <div className="flex items-start gap-2 md:gap-3">
                     <MapPin className="w-4 h-4 md:w-5 md:h-5 text-[#2B4A39] flex-shrink-0 mt-0.5" />
                     <div>
@@ -307,15 +320,6 @@ const SellerProfile = () => {
                   </div>
                 ))}
               </div>
-            </div>
-
-            <Separator />
-
-            {/* Настройки и дополнительно */}
-            <div className="py-2">
-              <ProfileMenuItem icon={Settings} label="Настройки" />
-              <ProfileMenuItem icon={FileText} label="Оферта" />
-              <ProfileMenuItem icon={LogOut} label="Выход" onClick={handleLogout} />
             </div>
 
             <Separator />
