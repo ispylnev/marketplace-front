@@ -1,17 +1,21 @@
 import { useState, useEffect } from 'react';
 import { authApi, LoginRequest } from '../api/auth';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { tokenManager } from '../api/client';
 import { ErrorAlert } from '../components/ui/ErrorAlert';
 
 export default function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [formData, setFormData] = useState<LoginRequest>({
     email: '',
     password: '',
   });
   const [error, setError] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  
+  // Получаем redirect параметр из URL (например: /login?redirect=/admin)
+  const redirectPath = searchParams.get('redirect') || '/';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,12 +24,22 @@ export default function Login() {
 
     try {
       const response = await authApi.login(formData);
-      console.log('Успешный вход:', response.user);
+      console.log('✅ Успешный вход:', response.user);
+      console.log('👥 User roles:', response.user.roles);
+      console.log('🎯 Redirect path:', redirectPath);
+      
       // Обновляем состояние авторизации
+      console.log('📢 Dispatching auth-change event...');
       window.dispatchEvent(new Event('auth-change'));
-      // Перенаправляем на главную страницу
-      navigate('/');
+      
+      // Небольшая задержка для надежности (дать время событию обработаться)
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Перенаправляем на страницу откуда пришли или на главную
+      console.log('🚀 Navigating to:', redirectPath);
+      navigate(redirectPath);
     } catch (err: any) {
+      console.error('❌ Login error:', err);
       setError(err);
     } finally {
       setLoading(false);

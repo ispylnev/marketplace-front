@@ -10,7 +10,9 @@ import Profile from './pages/Profile';
 import BuyerProfile from './pages/BuyerProfile';
 import SellerProfile from './pages/SellerProfile';
 import SellerAdmin from './pages/SellerAdmin';
+import SellerModeration from './pages/SellerModeration';
 import RegisterStore from './pages/RegisterStore';
+import AdminPanel from './pages/AdminPanel';
 
 // Layout компонент для страниц с Header/Footer
 function Layout({ children }: { children: React.ReactNode }) {
@@ -32,7 +34,7 @@ function App() {
         {/* Страницы без Header/Footer */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/register/store" element={<RegisterStore />} />
+        <Route path="/register-store" element={<RegisterStore />} />
         
         {/* Страницы с Header/Footer */}
         <Route path="/" element={<Layout><Home /></Layout>} />
@@ -42,6 +44,10 @@ function App() {
         <Route path="/profile/buyer" element={<BuyerProfile />} />
         <Route path="/seller/:sellerId" element={<SellerProfile />} />
         <Route path="/seller/admin" element={<SellerAdmin />} />
+        <Route path="/seller/moderation" element={<SellerModeration />} />
+        
+        {/* Административная панель (модераторы/админы) */}
+        <Route path="/admin" element={<AdminPanel />} />
       </Routes>
     </BrowserRouter>
   );

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Star, MessageCircle, Package, MessageSquare, Heart, Users, 
   Settings, FileText, LogOut, Flag, Edit, Camera, Trash2, Upload,
-  LayoutDashboard, Store
+  LayoutDashboard, Store, Clock, AlertCircle, CheckCircle, XCircle
 } from "lucide-react";
 import { ProfileMenuItem } from "../components/ProfileMenuItem";
 import { PlantCollection } from "../components/PlantCollection";
@@ -15,6 +15,8 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import api, { tokenManager } from '../api/client';
 import { userApi, UserProfileResponse } from '../api/user';
+import { sellerService } from '../api/sellerService';
+import { SellerResponse, SellerStatus, SellerStatusLabels } from '../types/seller';
 import { UserAvatar, generateInitials } from '../components/UserAvatar';
 import avatarBackground from '../assets/4068108bae8ada353e34675c0c754fb530d30e98.png';
 
@@ -48,7 +50,9 @@ const BuyerProfile = () => {
   const [user, setUser] = useState<UserInfo | null>(null);
   const [profile, setProfile] = useState<UserProfileResponse | null>(null);
   const [sellerId, setSellerId] = useState<number | null>(null);
+  const [sellerProfile, setSellerProfile] = useState<SellerResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingSellerStatus, setLoadingSellerStatus] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [avatarDialogOpen, setAvatarDialogOpen] = useState(false);
   const [editForm, setEditForm] = useState<UpdateProfileData>({});
@@ -89,14 +93,19 @@ const BuyerProfile = () => {
         });
       }
 
-      // Если пользователь - продавец, загружаем его sellerId
-      if (userResponse.data.roles && userResponse.data.roles.includes('SELLER')) {
-        try {
-          const sellerResponse = await api.get('/api/sellers/me');
-          setSellerId(sellerResponse.data.id);
-        } catch (error) {
+      // Загружаем информацию о продавце (заявка может быть в любом статусе)
+      setLoadingSellerStatus(true);
+      try {
+        const sellerData = await sellerService.getMySellerProfile();
+        setSellerProfile(sellerData);
+        setSellerId(sellerData.id);
+      } catch (error: any) {
+        // 404 = пользователь еще не подавал заявку на продавца
+        if (error.response?.status !== 404) {
           console.error('Ошибка загрузки данных продавца:', error);
         }
+      } finally {
+        setLoadingSellerStatus(false);
       }
     } catch (error) {
       console.error('Ошибка загрузки профиля:', error);
@@ -451,22 +460,89 @@ const BuyerProfile = () => {
             {/* Настройки и дополнительно */}
             <div className="py-2">
               <ProfileMenuItem icon={Settings} label="Настройки" />
-              {/* Показываем панель управления и ссылку на магазин только для продавцов */}
-              {user.roles && user.roles.includes('SELLER') && (
+
+              {/* Умная кнопка "Стать продавцом" с разными состояниями */}
+              {!sellerProfile && !loadingSellerStatus && (
+                // Нет заявки - показываем активную кнопку
+                <ProfileMenuItem
+                  icon={Store}
+                  label="Стать продавцом"
+                  onClick={() => navigate('/register-store')}
+                  variant="success"
+                />
+              )}
+
+              {loadingSellerStatus && (
+                // Загрузка статуса
+                <ProfileMenuItem
+                  icon={Clock}
+                  label="Загрузка..."
+                  disabled
+                />
+              )}
+
+              {sellerProfile?.status === SellerStatus.PENDING && (
+                // Заявка на рассмотрении
+                <div>
+                  <ProfileMenuItem
+                    icon={Clock}
+                    label="Заявка на рассмотрении"
+                    disabled
+                    variant="warning"
+                  />
+                  <p className="px-12 py-1 text-xs text-gray-500">
+                    Ваша заявка проверяется модератором. Обычно это занимает 1-2 рабочих дня.
+                  </p>
+                </div>
+              )}
+
+              {sellerProfile?.status === SellerStatus.APPROVED && (
+                // Одобрен - показываем панель управления
                 <>
-                  <ProfileMenuItem 
-                    icon={LayoutDashboard} 
-                    label="Панель управления" 
+                  <ProfileMenuItem
+                    icon={LayoutDashboard}
+                    label="Панель управления"
                     onClick={() => navigate('/seller/admin')}
                   />
                   {sellerId && (
-                    <ProfileMenuItem 
-                      icon={Store} 
-                      label="Мой магазин" 
+                    <ProfileMenuItem
+                      icon={Store}
+                      label="Мой магазин"
                       onClick={() => navigate(`/seller/${sellerId}`)}
                     />
                   )}
                 </>
+              )}
+
+              {sellerProfile?.status === SellerStatus.BLOCKED && (
+                // Заблокирован - показываем причину
+                <div>
+                  <ProfileMenuItem
+                    icon={XCircle}
+                    label="Магазин заблокирован"
+                    disabled
+                    variant="danger"
+                  />
+                  {sellerProfile.blockReason && (
+                    <p className="px-12 py-1 text-xs text-red-600">
+                      Причина: {sellerProfile.blockReason}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {sellerProfile?.status === SellerStatus.SUSPENDED && (
+                // Приостановлен
+                <div>
+                  <ProfileMenuItem
+                    icon={AlertCircle}
+                    label="Магазин приостановлен"
+                    disabled
+                  />
+                  <p className="px-12 py-1 text-xs text-gray-500">
+                    Ваш магазин временно приостановлен. Свяжитесь с поддержкой для уточнения деталей.
+                  </p>
+                </div>
               )}
               <ProfileMenuItem icon={FileText} label="Оферта" />
               <ProfileMenuItem icon={LogOut} label="Выход" onClick={handleLogout} />

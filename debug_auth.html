@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>JWT Decoder</title>
+</head>
+<body>
+    <h1>JWT Token Decoder</h1>
+    <textarea id="token" placeholder="Вставьте JWT токен" style="width: 100%; height: 100px;"></textarea>
+    <button onclick="decode()">Декодировать</button>
+    <pre id="result"></pre>
+    
+    <script>
+        function decode() {
+            const token = document.getElementById('token').value;
+            try {
+                const parts = token.split('.');
+                const payload = JSON.parse(atob(parts[1]));
+                document.getElementById('result').textContent = JSON.stringify(payload, null, 2);
+            } catch (e) {
+                document.getElementById('result').textContent = 'Ошибка: ' + e.message;
+            }
+        }
+    </script>
+</body>
+</html>
