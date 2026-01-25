@@ -22,3 +22,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Auxiliary documentation
+ADMIN_ACCESS_GUIDE.md
+ADMIN_LOGIN_DEBUG.md
+ADMIN_REDIRECT_FIX.md
+ADMIN_SECURITY.md
+SELLER_STATUS_UX.md
+*.docx
