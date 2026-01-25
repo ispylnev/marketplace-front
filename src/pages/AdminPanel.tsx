@@ -215,6 +215,31 @@ export default function AdminPanel() {
     }
   };
 
+  const handleRejectSeller = async (sellerId: number) => {
+    const reason = rejectReason[sellerId]?.trim();
+    if (!reason) {
+      setError('Укажите причину отклонения');
+      return;
+    }
+
+    setProcessingId(sellerId);
+    setError(null);
+    try {
+      await adminService.rejectSeller(sellerId, reason);
+      setSellers(prev => prev.filter(s => s.id !== sellerId));
+      setRejectReason(prev => {
+        const newState = { ...prev };
+        delete newState[sellerId];
+        return newState;
+      });
+    } catch (err: any) {
+      console.error('Ошибка отклонения заявки продавца:', err);
+      setError('Ошибка отклонения заявки продавца');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
   const handleBlockSeller = async (sellerId: number) => {
     const reason = blockReason[sellerId]?.trim();
     if (!reason) {
@@ -864,22 +889,39 @@ export default function AdminPanel() {
                               </div>
                             </div>
 
-                            {/* Поле для причины блокировки */}
+                            {/* Поля для причины отклонения/блокировки */}
                             {seller.status === SellerStatus.PENDING && (
-                              <div className="mb-3">
-                                <Label className="text-[#2D2E30] text-xs mb-1">
-                                  Причина блокировки (при блокировке)
-                                </Label>
-                                <Input
-                                  value={blockReason[seller.id] || ''}
-                                  onChange={(e) => setBlockReason(prev => ({
-                                    ...prev,
-                                    [seller.id]: e.target.value
-                                  }))}
-                                  placeholder="Укажите причину..."
-                                  className="text-sm"
-                                  disabled={processingId === seller.id}
-                                />
+                              <div className="mb-3 space-y-2">
+                                <div>
+                                  <Label className="text-[#2D2E30] text-xs mb-1">
+                                    Причина отклонения (для повторной подачи)
+                                  </Label>
+                                  <Input
+                                    value={rejectReason[seller.id] || ''}
+                                    onChange={(e) => setRejectReason(prev => ({
+                                      ...prev,
+                                      [seller.id]: e.target.value
+                                    }))}
+                                    placeholder="Например: Нужны дополнительные документы..."
+                                    className="text-sm"
+                                    disabled={processingId === seller.id}
+                                  />
+                                </div>
+                                <div>
+                                  <Label className="text-[#2D2E30] text-xs mb-1">
+                                    Причина блокировки (запрет деятельности)
+                                  </Label>
+                                  <Input
+                                    value={blockReason[seller.id] || ''}
+                                    onChange={(e) => setBlockReason(prev => ({
+                                      ...prev,
+                                      [seller.id]: e.target.value
+                                    }))}
+                                    placeholder="Например: Нарушение правил площадки..."
+                                    className="text-sm"
+                                    disabled={processingId === seller.id}
+                                  />
+                                </div>
                               </div>
                             )}
 
@@ -898,6 +940,16 @@ export default function AdminPanel() {
                                       <Check className="w-3 h-3 mr-1" />
                                     )}
                                     <span className="hidden sm:inline">Одобрить</span>
+                                  </Button>
+                                  <Button
+                                    onClick={() => handleRejectSeller(seller.id)}
+                                    disabled={processingId !== null}
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-yellow-600 text-yellow-600 hover:bg-yellow-50 text-xs h-8"
+                                  >
+                                    <X className="w-3 h-3 mr-1" />
+                                    <span className="hidden sm:inline">Отклонить</span>
                                   </Button>
                                   <Button
                                     onClick={() => handleBlockSeller(seller.id)}

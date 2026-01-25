@@ -76,6 +76,15 @@ export const sellerService = {
   },
 
   /**
+   * Повторно подать заявку после отклонения
+   * @returns Обновленная информация о магазине
+   */
+  async resubmitMySellerApplication(): Promise<SellerResponse> {
+    const response = await apiClient.post<SellerResponse>('/api/sellers/me/resubmit');
+    return response.data;
+  },
+
+  /**
    * Загрузить логотип магазина
    * @param file Файл изображения
    * @returns Обновленная информация о магазине

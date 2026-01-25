@@ -116,6 +116,18 @@ export const adminService = {
   },
 
   /**
+   * Отклонить заявку продавца (с возможностью повторной подачи)
+   */
+  async rejectSeller(sellerId: number, reason: string): Promise<SellerResponse> {
+    const response = await apiClient.post<SellerResponse>(
+      `/api/sellers/${sellerId}/reject`,
+      null,
+      { params: { reason } }
+    );
+    return response.data;
+  },
+
+  /**
    * Заблокировать продавца
    */
   async blockSeller(sellerId: number, reason: string): Promise<SellerResponse> {

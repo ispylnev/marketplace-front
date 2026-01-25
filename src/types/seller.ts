@@ -24,6 +24,8 @@ export enum SellerStatus {
   PENDING = 'PENDING',
   /** Одобрен */
   APPROVED = 'APPROVED',
+  /** Заявка отклонена */
+  REJECTED = 'REJECTED',
   /** Заблокирован */
   BLOCKED = 'BLOCKED',
   /** Приостановлен */
@@ -140,6 +142,7 @@ export const CompanyTypeLabels: Record<CompanyType, string> = {
 export const SellerStatusLabels: Record<SellerStatus, string> = {
   [SellerStatus.PENDING]: 'Ожидает одобрения',
   [SellerStatus.APPROVED]: 'Одобрен',
+  [SellerStatus.REJECTED]: 'Отклонен',
   [SellerStatus.BLOCKED]: 'Заблокирован',
   [SellerStatus.SUSPENDED]: 'Приостановлен'
 };

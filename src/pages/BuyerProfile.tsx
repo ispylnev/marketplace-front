@@ -217,6 +217,22 @@ const BuyerProfile = () => {
     }
   };
 
+  const handleResubmitSellerApplication = async () => {
+    try {
+      setLoadingSellerStatus(true);
+      await sellerService.resubmitMySellerApplication();
+      // Перезагружаем профиль продавца
+      const profile = await sellerService.getMySellerProfile();
+      setSellerProfile(profile);
+      setSellerId(profile.id);
+    } catch (error) {
+      console.error('Ошибка повторной подачи заявки:', error);
+      alert('Не удалось повторно подать заявку. Попробуйте позже.');
+    } finally {
+      setLoadingSellerStatus(false);
+    }
+  };
+
   const handleLogout = () => {
     tokenManager.clearToken();
     window.dispatchEvent(new Event('auth-change'));
@@ -493,6 +509,43 @@ const BuyerProfile = () => {
                   <p className="px-12 py-1 text-xs text-gray-500">
                     Ваша заявка проверяется модератором. Обычно это занимает 1-2 рабочих дня.
                   </p>
+                </div>
+              )}
+
+              {sellerProfile?.status === SellerStatus.REJECTED && (
+                // Заявка отклонена - можно исправить и отправить снова
+                <div>
+                  <ProfileMenuItem
+                    icon={XCircle}
+                    label="Заявка отклонена"
+                    disabled
+                    variant="danger"
+                  />
+                  {sellerProfile.blockReason && (
+                    <div className="px-12 py-2 space-y-2">
+                      <p className="text-xs text-red-600">
+                        <strong>Причина:</strong> {sellerProfile.blockReason}
+                      </p>
+                      <Button
+                        size="sm"
+                        onClick={() => navigate('/register-store')}
+                        className="bg-[#2B4A39] hover:bg-[#1f3529] text-white text-xs"
+                      >
+                        <Edit className="w-3 h-3 mr-1" />
+                        Исправить данные
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={handleResubmitSellerApplication}
+                        disabled={loadingSellerStatus}
+                        variant="outline"
+                        className="ml-2 border-[#2B4A39] text-[#2B4A39] hover:bg-[#2B4A39]/10 text-xs"
+                      >
+                        <CheckCircle className="w-3 h-3 mr-1" />
+                        {loadingSellerStatus ? 'Отправка...' : 'Отправить снова'}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
 

@@ -41,26 +41,60 @@ export default function RegisterStore() {
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
+  // Проверяем, нужно ли поле legalName
+  const needsLegalName = formData.companyType === CompanyType.LLC || formData.companyType === CompanyType.JSC;
+
+  // Проверяем, нужно ли поле ОГРН
+  const needsOgrn = formData.companyType !== CompanyType.SELF_EMPLOYED;
+
+  // Проверяем, нужен ли юр. адрес
+  const needsLegalAddress = formData.companyType === CompanyType.LLC || formData.companyType === CompanyType.JSC;
+
+  // Ожидаемая длина ИНН
+  const expectedInnLength = (formData.companyType === CompanyType.LLC || formData.companyType === CompanyType.JSC) ? 10 : 12;
+
+  // Ожидаемая длина ОГРН
+  const expectedOgrnLength = formData.companyType === CompanyType.INDIVIDUAL_ENTREPRENEUR ? 15 : 13;
+
+  // Название поля ОГРН
+  const ogrnLabel = formData.companyType === CompanyType.INDIVIDUAL_ENTREPRENEUR ? 'ОГРНИП' : 'ОГРН';
+
   const validateField = (field: keyof StoreRegistrationFormData, value: string | CompanyType): string => {
     switch (field) {
       case 'shopName':
         return !String(value).trim() ? 'Название магазина обязательно' : '';
       case 'legalName':
-        return !String(value).trim() ? 'Юридическое название обязательно' : '';
+        // Обязательно только для ООО/АО
+        if (needsLegalName && !String(value).trim()) {
+          return 'Юридическое название обязательно';
+        }
+        return '';
       case 'companyType':
         return !value ? 'Тип юридического лица обязателен' : '';
       case 'inn':
         if (!String(value).trim()) return 'ИНН обязателен';
-        if (!/^\d{10}$|^\d{12}$/.test(String(value))) return 'ИНН должен содержать 10 или 12 цифр';
+        if (String(value).length !== expectedInnLength) {
+          return `ИНН должен содержать ${expectedInnLength} цифр`;
+        }
+        if (!/^\d+$/.test(String(value))) return 'ИНН должен содержать только цифры';
         return '';
       case 'ogrn':
-        // ОГРН опциональный
-        if (String(value).trim() && !/^\d{13}$|^\d{15}$/.test(String(value))) {
-          return 'ОГРН должен содержать 13 или 15 цифр';
+        // Не требуется для самозанятых
+        if (!needsOgrn) return '';
+        // Обязательно для ИП и юрлиц
+        if (!String(value).trim()) {
+          return `${ogrnLabel} обязателен`;
         }
+        if (String(value).length !== expectedOgrnLength) {
+          return `${ogrnLabel} должен содержать ${expectedOgrnLength} цифр`;
+        }
+        if (!/^\d+$/.test(String(value))) return `${ogrnLabel} должен содержать только цифры`;
         return '';
       case 'legalAddress':
-        // Опциональное поле
+        // Обязательно только для ООО/АО
+        if (needsLegalAddress && !String(value).trim()) {
+          return 'Юридический адрес обязателен';
+        }
         return '';
       case 'contactEmail':
         if (!String(value).trim()) return 'Email обязателен';
@@ -81,6 +115,33 @@ export default function RegisterStore() {
   };
 
   const handleChange = (field: keyof StoreRegistrationFormData, value: string | CompanyType) => {
+    // При смене типа компании очищаем поля, которые могут стать невалидными
+    if (field === 'companyType') {
+      const newType = value as CompanyType;
+      const updates: Partial<StoreRegistrationFormData> = { companyType: newType };
+
+      // Очищаем ИНН если длина не подходит
+      const newInnLength = (newType === CompanyType.LLC || newType === CompanyType.JSC) ? 10 : 12;
+      if (formData.inn.length > newInnLength) {
+        updates.inn = '';
+      }
+
+      // Очищаем ОГРН если тип самозанятый
+      if (newType === CompanyType.SELF_EMPLOYED) {
+        updates.ogrn = '';
+      } else {
+        // Очищаем если длина не подходит
+        const newOgrnLength = newType === CompanyType.INDIVIDUAL_ENTREPRENEUR ? 15 : 13;
+        if (formData.ogrn.length > newOgrnLength) {
+          updates.ogrn = '';
+        }
+      }
+
+      setFormData(prev => ({ ...prev, ...updates }));
+      setErrors({}); // Сбрасываем все ошибки при смене типа
+      return;
+    }
+
     setFormData(prev => ({ ...prev, [field]: value }));
     // Очищаем ошибку при изменении поля
     if (errors[field]) {
@@ -246,32 +307,36 @@ export default function RegisterStore() {
                     )}
                   </div>
 
-                  <div className="md:col-span-2">
-                    <Label htmlFor="legalName" className="text-[#2D2E30]">
-                      Юридическое название <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      id="legalName"
-                      value={formData.legalName}
-                      onChange={(e) => handleChange('legalName', e.target.value)}
-                      placeholder="ООО 'Название компании'"
-                      className="mt-1 border-[#BCCEA9]"
-                    />
-                    {errors.legalName && (
-                      <p className="text-red-600 text-sm mt-1">{errors.legalName}</p>
-                    )}
-                  </div>
+                  {/* Юридическое название - только для ООО/АО */}
+                  {needsLegalName && (
+                    <div className="md:col-span-2">
+                      <Label htmlFor="legalName" className="text-[#2D2E30]">
+                        Юридическое название <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id="legalName"
+                        value={formData.legalName}
+                        onChange={(e) => handleChange('legalName', e.target.value)}
+                        placeholder="ООО «Название компании»"
+                        className="mt-1 border-[#BCCEA9]"
+                      />
+                      {errors.legalName && (
+                        <p className="text-red-600 text-sm mt-1">{errors.legalName}</p>
+                      )}
+                    </div>
+                  )}
 
                   <div>
                     <Label htmlFor="inn" className="text-[#2D2E30]">
                       ИНН <span className="text-red-500">*</span>
+                      <span className="text-gray-400 text-xs ml-1">({expectedInnLength} цифр)</span>
                     </Label>
                     <Input
                       id="inn"
                       value={formData.inn}
                       onChange={(e) => handleChange('inn', e.target.value.replace(/\D/g, ''))}
-                      placeholder="1234567890"
-                      maxLength={12}
+                      placeholder={'0'.repeat(expectedInnLength)}
+                      maxLength={expectedInnLength}
                       className="mt-1 border-[#BCCEA9]"
                     />
                     {errors.inn && (
@@ -279,38 +344,45 @@ export default function RegisterStore() {
                     )}
                   </div>
 
-                  <div>
-                    <Label htmlFor="ogrn" className="text-[#2D2E30]">
-                      ОГРН
-                    </Label>
-                    <Input
-                      id="ogrn"
-                      value={formData.ogrn}
-                      onChange={(e) => handleChange('ogrn', e.target.value.replace(/\D/g, ''))}
-                      placeholder="1234567890123"
-                      maxLength={15}
-                      className="mt-1 border-[#BCCEA9]"
-                    />
-                    {errors.ogrn && (
-                      <p className="text-red-600 text-sm mt-1">{errors.ogrn}</p>
-                    )}
-                  </div>
+                  {/* ОГРН/ОГРНИП - не нужен для самозанятых */}
+                  {needsOgrn && (
+                    <div>
+                      <Label htmlFor="ogrn" className="text-[#2D2E30]">
+                        {ogrnLabel} <span className="text-red-500">*</span>
+                        <span className="text-gray-400 text-xs ml-1">({expectedOgrnLength} цифр)</span>
+                      </Label>
+                      <Input
+                        id="ogrn"
+                        value={formData.ogrn}
+                        onChange={(e) => handleChange('ogrn', e.target.value.replace(/\D/g, ''))}
+                        placeholder={'0'.repeat(expectedOgrnLength)}
+                        maxLength={expectedOgrnLength}
+                        className="mt-1 border-[#BCCEA9]"
+                      />
+                      {errors.ogrn && (
+                        <p className="text-red-600 text-sm mt-1">{errors.ogrn}</p>
+                      )}
+                    </div>
+                  )}
 
-                  <div className="md:col-span-2">
-                    <Label htmlFor="legalAddress" className="text-[#2D2E30]">
-                      Юридический адрес
-                    </Label>
-                    <Input
-                      id="legalAddress"
-                      value={formData.legalAddress}
-                      onChange={(e) => handleChange('legalAddress', e.target.value)}
-                      placeholder="г. Москва, ул. Ленина, д. 1"
-                      className="mt-1 border-[#BCCEA9]"
-                    />
-                    {errors.legalAddress && (
-                      <p className="text-red-600 text-sm mt-1">{errors.legalAddress}</p>
-                    )}
-                  </div>
+                  {/* Юридический адрес - обязателен для ООО/АО */}
+                  {needsLegalAddress && (
+                    <div className="md:col-span-2">
+                      <Label htmlFor="legalAddress" className="text-[#2D2E30]">
+                        Юридический адрес <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id="legalAddress"
+                        value={formData.legalAddress}
+                        onChange={(e) => handleChange('legalAddress', e.target.value)}
+                        placeholder="г. Москва, ул. Ленина, д. 1"
+                        className="mt-1 border-[#BCCEA9]"
+                      />
+                      {errors.legalAddress && (
+                        <p className="text-red-600 text-sm mt-1">{errors.legalAddress}</p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </section>
 
