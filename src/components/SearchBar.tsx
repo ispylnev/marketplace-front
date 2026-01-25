@@ -10,12 +10,18 @@ interface SearchBarProps {
   autoFocus?: boolean;
   /** Кастомный класс для контейнера */
   className?: string;
+  /** Компактный вариант для header */
+  compact?: boolean;
+  /** Вариант для тёмного фона (header) */
+  variant?: 'light' | 'dark';
 }
 
 const SearchBar = ({
   placeholder = 'Поиск растений, семян, удобрений...',
   autoFocus = false,
   className = '',
+  compact = false,
+  variant = 'light',
 }: SearchBarProps) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -29,7 +35,7 @@ const SearchBar = ({
 
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const debounceRef = useRef<NodeJS.Timeout>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
   // Загрузка подсказок с дебаунсом
   const loadSuggestions = useCallback(async (searchQuery: string) => {
@@ -135,10 +141,22 @@ const SearchBar = ({
     inputRef.current?.focus();
   };
 
+  // Стили для разных вариантов
+  const inputStyles = compact
+    ? variant === 'dark'
+      ? 'w-full px-4 py-2 pl-10 pr-10 border border-white/30 bg-white/10 backdrop-blur-sm text-white placeholder-white/60 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-transparent'
+      : 'w-full px-4 py-2 pl-10 pr-10 border border-gray-300 bg-white text-gray-900 placeholder-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent'
+    : 'w-full pl-14 pr-14 py-5 border-2 border-gray-200 bg-white rounded-2xl focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none transition-all text-lg text-gray-900 shadow-xl placeholder:text-gray-400';
+
+  const iconSize = compact ? 'w-5 h-5' : 'w-6 h-6';
+  const iconLeft = compact ? 'left-3' : 'left-5';
+  const iconRight = compact ? 'right-3' : 'right-4';
+  const iconColor = variant === 'dark' && compact ? 'text-white/60' : 'text-gray-400';
+
   return (
-    <div ref={containerRef} className={`relative w-full max-w-3xl ${className}`}>
+    <div ref={containerRef} className={`relative w-full ${compact ? '' : 'max-w-3xl'} ${className}`}>
       <div className="relative">
-        <Search className="absolute left-5 top-1/2 transform -translate-y-1/2 text-gray-400 w-6 h-6" />
+        <Search className={`absolute ${iconLeft} top-1/2 transform -translate-y-1/2 ${iconColor} ${iconSize}`} />
         <input
           ref={inputRef}
           type="text"
@@ -152,20 +170,20 @@ const SearchBar = ({
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           autoFocus={autoFocus}
-          className="w-full pl-14 pr-14 py-5 border-2 border-white/20 bg-white/95 backdrop-blur-sm rounded-2xl focus:border-white focus:bg-white focus:outline-none transition-all text-lg shadow-xl placeholder:text-gray-500"
+          className={inputStyles}
         />
 
         {/* Loading / Clear button */}
-        <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
+        <div className={`absolute ${iconRight} top-1/2 transform -translate-y-1/2`}>
           {isLoading ? (
-            <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
+            <Loader2 className={`${compact ? 'w-4 h-4' : 'w-5 h-5'} ${iconColor} animate-spin`} />
           ) : query ? (
             <button
               onClick={handleClear}
-              className="text-gray-400 hover:text-gray-600 p-1"
+              className={`${iconColor} hover:opacity-80 p-1`}
               type="button"
             >
-              <X className="w-5 h-5" />
+              <X className={compact ? 'w-4 h-4' : 'w-5 h-5'} />
             </button>
           ) : null}
         </div>

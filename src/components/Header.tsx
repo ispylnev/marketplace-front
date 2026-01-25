@@ -1,7 +1,8 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { Search, ShoppingCart, User, Menu, X, LogIn, UserPlus, LogOut, Heart, Package } from 'lucide-react';
+import { ShoppingCart, User, Menu, X, LogIn, UserPlus, LogOut, Heart, Package } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { tokenManager } from '../api/client';
+import SearchBar from './SearchBar';
 import heroBg from '../assets/8e51749862af8a39de8862be61345a3928582e1e.png';
 import vegaLogo from '../assets/9f8522ff5c46c241fe026950d295cfdf39fe881b.png';
 
@@ -62,14 +63,11 @@ const Header = () => {
 
           {/* Search Bar */}
           <div className="flex-1 max-w-2xl mx-8 hidden md:block">
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Поиск растений и товаров..."
-                className="w-full px-4 py-2 pl-10 pr-4 border border-white/30 bg-white/10 backdrop-blur-sm text-white placeholder-white/60 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-transparent"
-              />
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/60 w-5 h-5" />
-            </div>
+            <SearchBar
+              compact
+              variant="dark"
+              placeholder="Поиск растений и товаров..."
+            />
           </div>
 
           {/* Right Side Icons */}

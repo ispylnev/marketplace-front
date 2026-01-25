@@ -357,14 +357,14 @@ const Catalog = () => {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-gradient-to-r from-primary-600 to-primary-700 text-white">
-        <div className="container mx-auto px-4 py-12">
-          <h1 className="text-4xl md:text-5xl font-bold mb-2">
+        <div className="container mx-auto px-4 py-10">
+          <h1 className="text-3xl md:text-4xl font-bold mb-2">
             {selectedCategory ? selectedCategory.name : 'Каталог растений'}
           </h1>
           <p className="text-primary-100 mb-6">
             {selectedCategory?.description || 'Найдите идеальное растение для вашего дома'}
           </p>
-          <SearchBar />
+          <SearchBar placeholder="Поиск по каталогу..." />
         </div>
       </div>
 
