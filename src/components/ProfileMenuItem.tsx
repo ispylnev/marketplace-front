@@ -24,7 +24,7 @@ export function ProfileMenuItem({
       case "danger":
         return "text-red-600 hover:text-red-700";
       case "success":
-        return "text-green-600 hover:text-green-700";
+        return "text-emerald-600 hover:text-emerald-700 font-medium";
       case "warning":
         return "text-yellow-600 hover:text-yellow-700";
       default:

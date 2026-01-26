@@ -1,17 +1,20 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  ShoppingBag, Package, TrendingUp, Settings, Check, X, Eye, Edit, 
+import {
+  ShoppingBag, Package, TrendingUp, Settings, Check, X, Eye, Edit,
   Trash2, Plus, Search, LogOut, DollarSign, Users, AlertCircle,
-  Clock, Truck, MapPin
+  Clock
 } from "lucide-react";
 import Header from "../components/Header";
 import { Separator } from "../components/ui/separator";
 import { Button } from "../components/ui/button";
 import { Label } from "../components/ui/label";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
-import api, { tokenManager } from '../api/client';
+import { tokenManager } from '../api/client';
+import { sellerService } from '../api/sellerService';
+import { offerService } from '../api/offerService';
+import { OfferResponse, OfferStatus as OfferStatusType } from '../types/offer';
+import { SellerResponse, SellerStatus, SellerStatusLabels } from '../types/seller';
 
 // Типы данных
 interface Offer {
@@ -21,11 +24,39 @@ interface Offer {
   imageUrl?: string;
   price: number;
   stock: number;
-  status: "active" | "pending" | "rejected" | "draft";
+  status: "active" | "pending" | "rejected" | "draft" | "disabled";
   views: number;
   sales: number;
   createdAt: string;
+  rejectionReason?: string;
 }
+
+// Маппинг статусов бэкенда -> фронтенда
+const mapOfferStatus = (status: OfferStatusType): Offer['status'] => {
+  switch (status) {
+    case 'APPROVED': return 'active';
+    case 'PENDING_REVIEW': return 'pending';
+    case 'REJECTED': return 'rejected';
+    case 'DISABLED': return 'disabled';
+    case 'DRAFT':
+    default: return 'draft';
+  }
+};
+
+// Маппинг OfferResponse -> Offer
+const mapOfferResponseToOffer = (response: OfferResponse): Offer => ({
+  id: response.id,
+  productName: response.title || `Оффер #${response.id}`,
+  latinName: response.latinName,
+  imageUrl: response.thumbnailUrl || response.mainImageUrl,
+  price: response.price,
+  stock: 0, // TODO: интеграция с inventory
+  status: mapOfferStatus(response.status),
+  views: 0, // TODO: статистика
+  sales: 0, // TODO: статистика
+  createdAt: response.createdAt.split('T')[0],
+  rejectionReason: response.rejectionReason
+});
 
 interface PopularProduct {
   id: number;
@@ -71,6 +102,8 @@ interface ShopSettings {
 const SellerAdmin = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [sellerProfile, setSellerProfile] = useState<SellerResponse | null>(null);
+  const [sellerError, setSellerError] = useState<string | null>(null);
   const [currentSection, setCurrentSection] = useState<"offers" | "orders" | "stats" | "settings">("offers");
   const [offers, setOffers] = useState<Offer[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -94,8 +127,6 @@ const SellerAdmin = () => {
     address: ""
   });
   
-  const [selectedOffer, setSelectedOffer] = useState<Offer | null>(null);
-  const [isAddingOffer, setIsAddingOffer] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
 
@@ -105,96 +136,75 @@ const SellerAdmin = () => {
 
   const loadData = async () => {
     try {
-      // ВРЕМЕННО: моковые данные для верстки
-      // TODO: заменить на реальные API вызовы
-      setTimeout(() => {
-        setOffers([
-          {
-            id: 1,
-            productName: "Флокс метельчатый 'Розовый закат'",
-            latinName: "Phlox paniculata",
-            imageUrl: "https://images.unsplash.com/photo-1597848212624-a19eb35e2651?w=200&h=200&fit=crop",
-            price: 380,
-            stock: 15,
-            status: "active",
-            views: 245,
-            sales: 18,
-            createdAt: "2025-01-10"
-          },
-          {
-            id: 2,
-            productName: "Ирис бородатый 'Purple Dream'",
-            latinName: "Iris germanica",
-            imageUrl: "https://images.unsplash.com/photo-1589994965851-a8f479c573a9?w=200&h=200&fit=crop",
-            price: 450,
-            stock: 8,
-            status: "active",
-            views: 189,
-            sales: 12,
-            createdAt: "2025-01-08"
-          },
-          {
-            id: 3,
-            productName: "Хоста 'Зеленый каскад'",
-            latinName: "Hosta",
-            imageUrl: "https://images.unsplash.com/photo-1598912887792-8c8c8c8c8c8c?w=200&h=200&fit=crop",
-            price: 520,
-            stock: 22,
-            status: "pending",
-            views: 134,
-            sales: 9,
-            createdAt: "2025-01-11"
-          }
-        ]);
+      // Загружаем профиль продавца
+      const seller = await sellerService.getMySellerProfile();
+      setSellerProfile(seller);
 
-        setOrders([
-          {
-            id: 1,
-            orderNumber: "ORD-2025-001234",
-            customer: "Анна Петрова",
-            customerEmail: "anna.petrova@email.com",
-            customerPhone: "+7 (925) 123-45-67",
-            products: [
-              { name: "Флокс метельчатый 'Розовый закат'", quantity: 2, price: 380 },
-              { name: "Ирис бородатый 'Purple Dream'", quantity: 1, price: 450 }
-            ],
-            totalAmount: 1210,
-            status: "new",
-            paymentStatus: "paid",
-            createdAt: "2025-01-11 14:30",
-            shippingAddress: "г. Москва, ул. Садовая, д. 15, кв. 42"
-          }
-        ]);
+      // Если продавец не одобрен - показываем сообщение
+      if (seller.status !== SellerStatus.APPROVED) {
+        setSellerError(
+          seller.status === SellerStatus.PENDING
+            ? 'Ваша заявка на регистрацию магазина находится на рассмотрении. После одобрения вы сможете добавлять товары.'
+            : seller.status === SellerStatus.REJECTED
+            ? `Ваша заявка была отклонена. ${seller.blockReason || 'Обратитесь в поддержку для уточнения причины.'}`
+            : seller.status === SellerStatus.BLOCKED
+            ? `Ваш магазин заблокирован. ${seller.blockReason || 'Обратитесь в поддержку.'}`
+            : 'Ваш магазин приостановлен.'
+        );
+        setLoading(false);
+        return;
+      }
+
+      // Загружаем офферы продавца
+      try {
+        console.log('Загружаем офферы...');
+        const offersResponse = await offerService.getMyOffers();
+        console.log('Ответ API офферов:', offersResponse);
+        const mappedOffers = offersResponse.map(mapOfferResponseToOffer);
+        console.log('Замапленные офферы:', mappedOffers);
+        setOffers(mappedOffers);
+
+        // Подсчитываем статистику на основе офферов
+        const pendingCount = mappedOffers.filter(o => o.status === 'pending').length;
 
         setStats({
-          totalRevenue: 45680,
-          totalOrders: 78,
-          totalOffers: 6,
-          averageRating: 4.8,
-          newOrders: 2,
-          pendingOffers: 1,
-          totalViews: 1323,
-          conversionRate: 5.9,
-          popularProducts: [
-            { id: 1, name: "Лилейник 'Огненный шар'", imageUrl: "https://images.unsplash.com/photo-1597848212624-a19eb35e2651?w=100&h=100&fit=crop", soldCount: 24 },
-            { id: 2, name: "Флокс метельчатый 'Розовый закат'", imageUrl: "https://images.unsplash.com/photo-1597848212624-a19eb35e2651?w=100&h=100&fit=crop", soldCount: 18 },
-            { id: 3, name: "Ирис бородатый 'Purple Dream'", imageUrl: "https://images.unsplash.com/photo-1589994965851-a8f479c573a9?w=100&h=100&fit=crop", soldCount: 12 },
-            { id: 4, name: "Хоста 'Зеленый каскад'", imageUrl: "https://images.unsplash.com/photo-1598912887792-8c8c8c8c8c8c?w=100&h=100&fit=crop", soldCount: 9 }
-          ]
+          totalRevenue: 0, // TODO: интеграция с заказами
+          totalOrders: 0,
+          totalOffers: mappedOffers.length,
+          averageRating: seller.rating || 0,
+          newOrders: 0,
+          pendingOffers: pendingCount,
+          totalViews: 0, // TODO: статистика просмотров
+          conversionRate: 0,
+          popularProducts: []
         });
 
+        // Заполняем настройки магазина из профиля продавца
         setShopSettings({
-          name: "Питомник Ситцевый Сад",
-          description: "Профессиональный питомник многолетних растений с 15-летним опытом. Предлагаем качественные саженцы с гарантией приживаемости.",
-          email: "info@sitcevysad.ru",
-          phone: "+7 (495) 123-45-67",
-          address: "Московская обл., г. Подольск, ул. Садовая, д. 10"
+          name: seller.shopName || '',
+          description: seller.description || '',
+          email: seller.contactEmail || '',
+          phone: seller.contactPhone || '',
+          address: seller.legalAddress || ''
         });
+      } catch (offerError: any) {
+        console.error('Ошибка загрузки офферов:', offerError);
+        console.error('Детали ошибки:', offerError?.response?.data || offerError?.message);
+        setOffers([]);
+      }
 
-        setLoading(false);
-      }, 500);
-    } catch (error) {
+      // TODO: загрузка заказов
+      setOrders([]);
+
+      setLoading(false);
+    } catch (error: any) {
       console.error('Ошибка загрузки данных:', error);
+      // Если пользователь не является продавцом
+      if (error.response?.status === 404) {
+        setSellerError('Вы еще не зарегистрированы как продавец. Сначала зарегистрируйте магазин.');
+      } else {
+        setSellerError('Ошибка загрузки данных. Попробуйте позже.');
+      }
       setLoading(false);
     }
   };
@@ -203,10 +213,6 @@ const SellerAdmin = () => {
     tokenManager.clearToken();
     window.dispatchEvent(new Event('auth-change'));
     navigate('/');
-  };
-
-  const updateOfferStatus = (id: number, status: Offer["status"]) => {
-    setOffers(offers.map(o => o.id === id ? { ...o, status } : o));
   };
 
   const updateOrderStatus = (id: number, status: Order["status"]) => {
@@ -218,11 +224,51 @@ const SellerAdmin = () => {
   };
 
   const updateOfferStock = (id: number, newStock: number) => {
-    setOffers(offers.map(o => 
-      o.id === id 
-        ? { ...o, stock: newStock } 
+    setOffers(offers.map(o =>
+      o.id === id
+        ? { ...o, stock: newStock }
         : o
     ));
+  };
+
+  // Отправить оффер на модерацию
+  const handleSubmitForReview = async (id: number) => {
+    try {
+      await offerService.submitForReview(id);
+      setOffers(offers.map(o => o.id === id ? { ...o, status: 'pending' as const } : o));
+    } catch (error) {
+      console.error('Ошибка отправки на модерацию:', error);
+    }
+  };
+
+  // Повторно подать отклонённый оффер
+  const handleResubmit = async (id: number) => {
+    try {
+      await offerService.resubmitOffer(id);
+      setOffers(offers.map(o => o.id === id ? { ...o, status: 'pending' as const, rejectionReason: undefined } : o));
+    } catch (error) {
+      console.error('Ошибка повторной подачи:', error);
+    }
+  };
+
+  // Деактивировать оффер
+  const handleDeactivate = async (id: number) => {
+    try {
+      await offerService.deactivateOffer(id);
+      setOffers(offers.map(o => o.id === id ? { ...o, status: 'disabled' as const } : o));
+    } catch (error) {
+      console.error('Ошибка деактивации:', error);
+    }
+  };
+
+  // Реактивировать оффер
+  const handleReactivate = async (id: number) => {
+    try {
+      await offerService.reactivateOffer(id);
+      setOffers(offers.map(o => o.id === id ? { ...o, status: 'active' as const } : o));
+    } catch (error) {
+      console.error('Ошибка реактивации:', error);
+    }
   };
 
   const filteredOffers = offers.filter(o => {
@@ -247,6 +293,54 @@ const SellerAdmin = () => {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#2B4A39] mx-auto"></div>
           <p className="mt-4 text-gray-600">Загрузка...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Показываем сообщение если продавец не одобрен или не зарегистрирован
+  if (sellerError) {
+    return (
+      <div className="min-h-screen bg-[#F8F9FA]">
+        <Header />
+        <div className="mx-auto px-4 py-8 md:px-6 md:py-12 lg:px-12 max-w-2xl">
+          <div className="bg-white shadow-md rounded-xl p-6 md:p-8 text-center">
+            <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-yellow-100 flex items-center justify-center mx-auto mb-4 md:mb-6">
+              <Clock className="w-8 h-8 md:w-10 md:h-10 text-yellow-600" />
+            </div>
+            <h1 className="text-[#2B4A39] text-xl md:text-2xl font-semibold mb-3 md:mb-4">
+              {sellerProfile ? SellerStatusLabels[sellerProfile.status] : 'Доступ ограничен'}
+            </h1>
+            <p className="text-[#2D2E30]/70 text-sm md:text-base mb-6">
+              {sellerError}
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Button
+                onClick={() => navigate('/profile')}
+                className="bg-[#BCCEA9] hover:bg-[#a8ba95] text-[#2B4A39]"
+              >
+                Вернуться в профиль
+              </Button>
+              {!sellerProfile && (
+                <Button
+                  onClick={() => navigate('/register-store')}
+                  variant="outline"
+                  className="border-[#2B4A39] text-[#2B4A39] hover:bg-[#BCCEA9]/20"
+                >
+                  Зарегистрировать магазин
+                </Button>
+              )}
+              {sellerProfile?.status === SellerStatus.REJECTED && (
+                <Button
+                  onClick={() => navigate('/register-store')}
+                  variant="outline"
+                  className="border-[#2B4A39] text-[#2B4A39] hover:bg-[#BCCEA9]/20"
+                >
+                  Подать заявку повторно
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -375,7 +469,7 @@ const SellerAdmin = () => {
                         Мои товары
                       </h2>
                       <Button
-                        onClick={() => setIsAddingOffer(true)}
+                        onClick={() => navigate('/seller/offers/new')}
                         className="bg-[#BCCEA9] hover:bg-[#a8ba95] text-[#2B4A39] flex items-center gap-2"
                       >
                         <Plus className="w-4 h-4 md:w-5 md:h-5" />
@@ -402,6 +496,8 @@ const SellerAdmin = () => {
                         <option value="all">Все статусы</option>
                         <option value="active">Активные</option>
                         <option value="pending">На модерации</option>
+                        <option value="rejected">Отклонённые</option>
+                        <option value="disabled">Отключённые</option>
                         <option value="draft">Черновики</option>
                       </select>
                     </div>
@@ -441,10 +537,14 @@ const SellerAdmin = () => {
                               <span className={`shrink-0 rounded-full font-semibold text-xs px-2 py-1 md:px-3 md:py-1 ${
                                 offer.status === "active" ? "bg-green-100 text-green-800" :
                                 offer.status === "pending" ? "bg-yellow-100 text-yellow-800" :
+                                offer.status === "rejected" ? "bg-red-100 text-red-800" :
+                                offer.status === "disabled" ? "bg-orange-100 text-orange-800" :
                                 "bg-gray-100 text-gray-800"
                               }`}>
                                 {offer.status === "active" ? "Активен" :
-                                 offer.status === "pending" ? "Модерация" : "Черновик"}
+                                 offer.status === "pending" ? "Модерация" :
+                                 offer.status === "rejected" ? "Отклонён" :
+                                 offer.status === "disabled" ? "Отключён" : "Черновик"}
                               </span>
                             </div>
                             
@@ -492,7 +592,7 @@ const SellerAdmin = () => {
 
                             <div className="flex flex-wrap gap-1.5 md:gap-2">
                               <Button
-                                onClick={() => setSelectedOffer(offer)}
+                                onClick={() => navigate(`/seller/offers/${offer.id}/edit`)}
                                 size="sm"
                                 variant="ghost"
                                 className="text-[#2B4A39] text-xs md:text-sm h-8 md:h-9 px-2 md:px-3"
@@ -502,7 +602,7 @@ const SellerAdmin = () => {
                               </Button>
                               {offer.status === "active" && (
                                 <Button
-                                  onClick={() => updateOfferStatus(offer.id, "draft")}
+                                  onClick={() => handleDeactivate(offer.id)}
                                   size="sm"
                                   variant="ghost"
                                   className="text-[#2D2E30]/70 text-xs md:text-sm h-8 md:h-9 px-2 md:px-3"
@@ -513,12 +613,32 @@ const SellerAdmin = () => {
                               )}
                               {offer.status === "draft" && (
                                 <Button
-                                  onClick={() => updateOfferStatus(offer.id, "active")}
+                                  onClick={() => handleSubmitForReview(offer.id)}
                                   size="sm"
                                   className="bg-[#BCCEA9] hover:bg-[#a8ba95] text-[#2B4A39] text-xs md:text-sm h-8 md:h-9 px-2 md:px-3"
                                 >
                                   <Check className="w-3 h-3 md:w-4 md:h-4 mr-1" />
-                                  Опубликовать
+                                  На модерацию
+                                </Button>
+                              )}
+                              {offer.status === "rejected" && (
+                                <Button
+                                  onClick={() => handleResubmit(offer.id)}
+                                  size="sm"
+                                  className="bg-[#BCCEA9] hover:bg-[#a8ba95] text-[#2B4A39] text-xs md:text-sm h-8 md:h-9 px-2 md:px-3"
+                                >
+                                  <Check className="w-3 h-3 md:w-4 md:h-4 mr-1" />
+                                  Подать повторно
+                                </Button>
+                              )}
+                              {offer.status === "disabled" && (
+                                <Button
+                                  onClick={() => handleReactivate(offer.id)}
+                                  size="sm"
+                                  className="bg-[#BCCEA9] hover:bg-[#a8ba95] text-[#2B4A39] text-xs md:text-sm h-8 md:h-9 px-2 md:px-3"
+                                >
+                                  <Check className="w-3 h-3 md:w-4 md:h-4 mr-1" />
+                                  Активировать
                                 </Button>
                               )}
                               <Button
@@ -531,6 +651,13 @@ const SellerAdmin = () => {
                                 Удалить
                               </Button>
                             </div>
+
+                            {/* Причина отклонения */}
+                            {offer.status === "rejected" && offer.rejectionReason && (
+                              <div className="mt-2 p-2 bg-red-50 rounded text-xs md:text-sm text-red-700">
+                                <strong>Причина отклонения:</strong> {offer.rejectionReason}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>

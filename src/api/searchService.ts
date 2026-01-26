@@ -319,6 +319,23 @@ export interface PlantSearchResponse {
   tookMs: number;
 }
 
+// ==================== Suggest (Autocomplete) ====================
+
+// Элемент автокомплита
+export interface SuggestItem {
+  text: string;
+  type: 'offer' | 'plant' | 'category';
+  id: number;
+  subtext?: string;
+}
+
+// Ответ группированного автокомплита
+export interface SuggestGroupedResponse {
+  offers: SuggestItem[];
+  plants: SuggestItem[];
+  categories: SuggestItem[];
+}
+
 // Параметры поиска растений
 export interface PlantSearchParams {
   q?: string;
@@ -429,6 +446,21 @@ export const searchService = {
    */
   async getStatus(): Promise<SearchStatus> {
     const response = await apiClient.get<SearchStatus>('/api/search/status');
+    return response.data;
+  },
+
+  /**
+   * Автокомплит с группировкой
+   * Возвращает подсказки, сгруппированные по типу: офферы, растения, категории
+   */
+  async suggestGrouped(query: string, limit: number = 5): Promise<SuggestGroupedResponse> {
+    if (!query || query.length < 2) {
+      return { offers: [], plants: [], categories: [] };
+    }
+
+    const response = await apiClient.get<SuggestGroupedResponse>('/api/search/suggest/grouped', {
+      params: { q: query, limit }
+    });
     return response.data;
   },
 

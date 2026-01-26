@@ -13,6 +13,8 @@ import SellerAdmin from './pages/SellerAdmin';
 import SellerModeration from './pages/SellerModeration';
 import RegisterStore from './pages/RegisterStore';
 import AdminPanel from './pages/AdminPanel';
+import CreateOffer from './pages/CreateOffer';
+import EditOffer from './pages/EditOffer';
 
 // Layout компонент для страниц с Header/Footer
 function Layout({ children }: { children: React.ReactNode }) {
@@ -44,6 +46,8 @@ function App() {
         <Route path="/profile/buyer" element={<BuyerProfile />} />
         <Route path="/seller/:sellerId" element={<SellerProfile />} />
         <Route path="/seller/admin" element={<SellerAdmin />} />
+        <Route path="/seller/offers/new" element={<CreateOffer />} />
+        <Route path="/seller/offers/:id/edit" element={<EditOffer />} />
         <Route path="/seller/moderation" element={<SellerModeration />} />
         
         {/* Административная панель (модераторы/админы) */}

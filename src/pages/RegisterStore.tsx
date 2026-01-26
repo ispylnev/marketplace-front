@@ -64,8 +64,9 @@ export default function RegisterStore() {
       case 'shopName':
         return !String(value).trim() ? 'Название магазина обязательно' : '';
       case 'legalName':
-        // Обязательно только для ООО/АО
-        if (needsLegalName && !String(value).trim()) {
+        // Обязательно только для ООО/АО - явно проверяем текущий тип компании
+        const isLegalEntityType = formData.companyType === CompanyType.LLC || formData.companyType === CompanyType.JSC;
+        if (isLegalEntityType && !String(value).trim()) {
           return 'Юридическое название обязательно';
         }
         return '';
@@ -79,8 +80,9 @@ export default function RegisterStore() {
         if (!/^\d+$/.test(String(value))) return 'ИНН должен содержать только цифры';
         return '';
       case 'ogrn':
-        // Не требуется для самозанятых
-        if (!needsOgrn) return '';
+        // Не требуется для самозанятых - явно проверяем текущий тип компании
+        const ogrnRequired = formData.companyType !== CompanyType.SELF_EMPLOYED;
+        if (!ogrnRequired) return '';
         // Обязательно для ИП и юрлиц
         if (!String(value).trim()) {
           return `${ogrnLabel} обязателен`;
@@ -91,8 +93,9 @@ export default function RegisterStore() {
         if (!/^\d+$/.test(String(value))) return `${ogrnLabel} должен содержать только цифры`;
         return '';
       case 'legalAddress':
-        // Обязательно только для ООО/АО
-        if (needsLegalAddress && !String(value).trim()) {
+        // Обязательно только для ООО/АО - явно проверяем текущий тип компании
+        const addressRequired = formData.companyType === CompanyType.LLC || formData.companyType === CompanyType.JSC;
+        if (addressRequired && !String(value).trim()) {
           return 'Юридический адрес обязателен';
         }
         return '';
@@ -192,11 +195,11 @@ export default function RegisterStore() {
       
       console.log('Магазин успешно зарегистрирован:', seller);
       setSubmitted(true);
-      
-      // Перенаправляем на страницу профиля продавца через 2 секунды
+
+      // Перенаправляем на профиль пользователя через 2 секунды
+      // (магазин еще не одобрен, поэтому публичная страница не доступна)
       setTimeout(() => {
-        // Перенаправляем на профиль зарегистрированного продавца
-        navigate(`/seller/${seller.id}`);
+        navigate('/profile');
       }, 2000);
     } catch (err: any) {
       setSubmitted(false);
@@ -260,26 +263,18 @@ export default function RegisterStore() {
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {Object.values(CompanyType).map((type) => (
-                    <label
+                    <button
                       key={type}
+                      type="button"
+                      onClick={() => handleChange('companyType', type)}
                       className={`flex items-center justify-center cursor-pointer transition-all p-4 rounded-lg border-2 ${
                         formData.companyType === type
                           ? 'border-[#2B4A39] bg-[#BCCEA9] text-[#2B4A39]'
                           : 'border-[#BCCEA9] bg-transparent text-[#2D2E30] hover:border-[#2B4A39]'
                       }`}
                     >
-                      <input
-                        type="radio"
-                        value={type}
-                        checked={formData.companyType === type}
-                        onChange={(e) => {
-                          const newType = e.target.value as CompanyType;
-                          handleChange('companyType', newType);
-                        }}
-                        className="sr-only"
-                      />
                       <span className="font-medium">{CompanyTypeLabels[type]}</span>
-                    </label>
+                    </button>
                   ))}
                 </div>
               </section>

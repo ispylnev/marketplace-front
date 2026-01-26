@@ -562,6 +562,7 @@ const BuyerProfile = () => {
                       icon={Store}
                       label="Мой магазин"
                       onClick={() => navigate(`/seller/${sellerId}`)}
+                      variant="success"
                     />
                   )}
                 </>
