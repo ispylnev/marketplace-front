@@ -1,22 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  ShoppingBag, 
-  Users, 
-  FolderTree, 
-  BookOpen, 
-  Check, 
-  X, 
-  Eye, 
-  Edit, 
-  Trash2, 
-  Plus,
+import {
+  ShoppingBag,
+  Users,
+  FolderTree,
+  BookOpen,
+  Check,
+  X,
+  Eye,
+  Edit,
+  Trash2,
   Search,
-  ChevronDown,
-  ChevronRight,
-  Sun,
-  CloudRain,
-  PawPrint,
   AlertCircle,
   LogOut,
   Lock,
@@ -27,12 +21,10 @@ import { Separator } from "../components/ui/separator";
 import { Label } from "../components/ui/label";
 import { Input } from "../components/ui/input";
 import { tokenManager } from '../api/client';
-import { adminService, OfferForModeration, ProductResponse, CategoryResponse, BrandResponse } from '../api/adminService';
+import { adminService, OfferForModeration, CategoryResponse, BrandResponse } from '../api/adminService';
 import { SellerResponse, SellerStatus, SellerStatusLabels, CompanyTypeLabels, CompanyType } from '../types/seller';
 
 type Section = "offers" | "sellers" | "categories" | "brands";
-type OfferStatus = "all" | "PENDING" | "APPROVED" | "REJECTED";
-type SellerFilterStatus = "all" | "pending" | "active" | "blocked";
 
 export default function AdminPanel() {
   const navigate = useNavigate();
@@ -362,7 +354,7 @@ export default function AdminPanel() {
   });
 
   // Статистика
-  const pendingOffersCount = offers.filter(o => o.status === "PENDING").length;
+  const pendingOffersCount = offers.filter(o => o.status === "PENDING_REVIEW").length;
   const pendingSellersCount = sellers.filter(s => s.status === SellerStatus.PENDING).length;
 
   // ==================== Проверка загрузки ====================
@@ -674,7 +666,7 @@ export default function AdminPanel() {
                           className="px-3 py-2 text-sm border border-[#2D2E30]/20 rounded-lg focus:outline-none focus:border-[#BCCEA9]"
                         >
                           <option value="all">Все</option>
-                          <option value="PENDING">Модерация</option>
+                          <option value="PENDING_REVIEW">Модерация</option>
                           <option value="APPROVED">Одобрено</option>
                           <option value="REJECTED">Отклонено</option>
                         </select>
@@ -696,12 +688,12 @@ export default function AdminPanel() {
                                 </p>
                               </div>
                               <span className={`px-2 py-1 rounded-full text-xs font-semibold shrink-0 ${
-                                offer.status === "PENDING" ? "bg-yellow-100 text-yellow-800" :
+                                offer.status === "PENDING_REVIEW" ? "bg-yellow-100 text-yellow-800" :
                                 offer.status === "APPROVED" ? "bg-green-100 text-green-800" :
                                 offer.status === "REJECTED" ? "bg-red-100 text-red-800" :
                                 "bg-gray-100 text-gray-800"
                               }`}>
-                                {offer.status === "PENDING" ? "Модерация" :
+                                {offer.status === "PENDING_REVIEW" ? "Модерация" :
                                  offer.status === "APPROVED" ? "Одобрено" :
                                  offer.status === "REJECTED" ? "Отклонено" :
                                  offer.status}
@@ -741,7 +733,7 @@ export default function AdminPanel() {
                               )}
                             </div>
 
-                            {offer.status === "PENDING" && (
+                            {offer.status === "PENDING_REVIEW" && (
                               <div className="mb-2">
                                 <Label className="text-[#2D2E30] text-xs mb-1">
                                   Причина отклонения (при отклонении)
@@ -760,7 +752,7 @@ export default function AdminPanel() {
                             )}
 
                             <div className="flex flex-wrap gap-2">
-                              {offer.status === "PENDING" && (
+                              {offer.status === "PENDING_REVIEW" && (
                                 <>
                                   <Button
                                     onClick={() => approveOffer(offer.id)}

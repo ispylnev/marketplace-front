@@ -18,12 +18,17 @@ export interface OfferForModeration {
   barcode?: string;
   handlingTimeDays?: number;
   warrantyMonths?: number;
-  status: 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'INACTIVE';
+  status: 'DRAFT' | 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'DISABLED';
   rejectionReason?: string;
   submittedAt?: string;
   approvedAt?: string;
   createdAt: string;
   updatedAt: string;
+  // Дополнительные поля с деталями
+  title?: string;
+  latinName?: string;
+  mainImageUrl?: string;
+  thumbnailUrl?: string;
 }
 
 // Продукт (товарная карточка)
