@@ -9,6 +9,7 @@ export interface CategoryPublic {
   id: number;
   name: string;
   slug: string;
+  fullSlug?: string;  // slug-id для URL: /catalog/{fullSlug}
   description?: string;
   parentId?: number;
   level?: number;
@@ -24,6 +25,7 @@ export interface ProductPublic {
   id: number;
   name: string;
   slug: string;
+  fullSlug?: string;  // slug-id для URL: /product/{fullSlug}
   description?: string;
   status: string;
   brandId?: number;

@@ -1,6 +1,8 @@
 export interface Product {
   id: string;
   name: string;
+  slug?: string;
+  fullSlug?: string;  // slug-id для URL
   price: string;
   oldPrice?: string;
   image: string;
@@ -12,6 +14,8 @@ export interface Product {
   seller?: {
     name: string;
     rating: number;
+    slug?: string;
+    fullSlug?: string;
   };
   specifications?: Record<string, string>;
   images?: string[];
@@ -20,6 +24,8 @@ export interface Product {
 export interface Category {
   id: string;
   name: string;
+  slug?: string;
+  fullSlug?: string;  // slug-id для URL
   image: string;
   count: number;
   icon?: string;

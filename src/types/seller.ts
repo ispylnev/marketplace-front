@@ -84,6 +84,10 @@ export interface SellerResponse {
   userId: number;
   /** Название магазина */
   shopName: string;
+  /** URL-slug для SEO */
+  slug?: string;
+  /** Полный slug для URL: slug-id */
+  fullSlug?: string;
   /** Юридическое название */
   legalName: string;
   /** Тип юридического лица */

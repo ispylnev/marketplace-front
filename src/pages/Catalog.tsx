@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, useParams, Link } from 'react-router-dom';
 import ProductCard from '../components/ProductCard';
 import SearchBar from '../components/SearchBar';
 import { FilterSidebar, ActiveFilters, ActiveFilter, SortOption, CareFiltersState } from '../components/filters';
@@ -7,12 +7,15 @@ import { Filter, Grid, List, Loader2, ChevronRight, ChevronLeft, AlertCircle } f
 import { Product } from '../types';
 import { catalogService, CategoryPublic } from '../api/catalogService';
 import { searchService, OfferSearchParams, OfferSearchResponse, OfferFacets } from '../api/searchService';
+import { extractId } from '../utils/slugUtils';
 
 const Catalog = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { categorySlug: categorySlugParam } = useParams<{ categorySlug?: string }>();
 
-  // URL параметры
-  const categorySlug = searchParams.get('category');
+  // URL параметры - поддержка и path param, и query param для обратной совместимости
+  const categoryIdFromPath = extractId(categorySlugParam);
+  const categorySlugFromQuery = searchParams.get('category');
   const searchQuery = searchParams.get('q') || '';
   const currentPage = parseInt(searchParams.get('page') || '0', 10);
 
@@ -68,15 +71,22 @@ const Catalog = () => {
     loadCategories();
   }, []);
 
-  // Set selected category from URL
+  // Set selected category from URL (path param или query param)
   useEffect(() => {
-    if (categorySlug && categories.length > 0) {
-      const found = categories.find(c => c.slug === categorySlug);
-      setSelectedCategory(found || null);
-    } else {
-      setSelectedCategory(null);
+    if (categories.length > 0) {
+      if (categoryIdFromPath) {
+        // Новый формат: /catalog/slug-123
+        const found = categories.find(c => c.id === categoryIdFromPath);
+        setSelectedCategory(found || null);
+      } else if (categorySlugFromQuery) {
+        // Старый формат: /catalog?category=slug
+        const found = categories.find(c => c.slug === categorySlugFromQuery);
+        setSelectedCategory(found || null);
+      } else {
+        setSelectedCategory(null);
+      }
     }
-  }, [categorySlug, categories]);
+  }, [categoryIdFromPath, categorySlugFromQuery, categories]);
 
   // Load products when filters change
   useEffect(() => {

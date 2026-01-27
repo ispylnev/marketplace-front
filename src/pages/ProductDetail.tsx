@@ -2,16 +2,18 @@ import { useParams } from 'react-router-dom';
 import { Star, Heart, ShoppingCart, Truck, Shield, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useState } from 'react';
+import { extractId } from '../utils/slugUtils';
 
 const ProductDetail = () => {
-  const { id } = useParams();
+  const { slugWithId } = useParams();
+  const id = extractId(slugWithId);
   const [selectedImage, setSelectedImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [isFavorite, setIsFavorite] = useState(false);
 
   // Mock product data
   const product = {
-    id: id || '1',
+    id: id?.toString() || '1',
     name: 'Монстера Деликатесная (Monstera Deliciosa)',
     price: '2 990',
     oldPrice: '3 500',

@@ -41,10 +41,11 @@ function App() {
         {/* Страницы с Header/Footer */}
         <Route path="/" element={<Layout><Home /></Layout>} />
         <Route path="/catalog" element={<Layout><Catalog /></Layout>} />
-        <Route path="/product/:id" element={<Layout><ProductDetail /></Layout>} />
+        <Route path="/catalog/:categorySlug" element={<Layout><Catalog /></Layout>} />
+        <Route path="/product/:slugWithId" element={<Layout><ProductDetail /></Layout>} />
         <Route path="/profile" element={<Layout><Profile /></Layout>} />
         <Route path="/profile/buyer" element={<BuyerProfile />} />
-        <Route path="/seller/:sellerId" element={<SellerProfile />} />
+        <Route path="/seller/:slugWithId" element={<SellerProfile />} />
         <Route path="/seller/admin" element={<SellerAdmin />} />
         <Route path="/seller/offers/new" element={<CreateOffer />} />
         <Route path="/seller/offers/:id/edit" element={<EditOffer />} />

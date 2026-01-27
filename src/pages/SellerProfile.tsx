@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { Star, MessageCircle, ShoppingCart, Package, MessageSquare, Heart, Users, Settings, FileText, LogOut, Flag, MapPin, Clock, Truck } from "lucide-react";
+import { useParams } from 'react-router-dom';
+import { Star, MessageCircle, ShoppingCart, Package, Heart, Flag, MapPin, Clock, Truck } from "lucide-react";
 import { ProfileMenuItem } from "../components/ProfileMenuItem";
 import Header from "../components/Header";
 import { Separator } from "../components/ui/separator";
 import { Button } from "../components/ui/button";
 import { sellerService } from '../api/sellerService';
 import { SellerResponse } from '../types/seller';
+import { extractId } from '../utils/slugUtils';
 import profileAvatar from '../assets/c5c335b900c25c01ebdade434d4ee2ee9ce87b4b.png';
 import avatarBackground from '../assets/4068108bae8ada353e34675c0c754fb530d30e98.png';
 // Используем существующие изображения для товаров
@@ -19,7 +20,8 @@ import ficusImage from '../assets/a522e10182dc3cfa749b0aebde64f00ccca7991d.png';
 
 const SellerProfile = () => {
   const navigate = useNavigate();
-  const { sellerId } = useParams<{ sellerId: string }>();
+  const { slugWithId } = useParams<{ slugWithId: string }>();
+  const sellerId = extractId(slugWithId);
   const [seller, setSeller] = useState<SellerResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -35,13 +37,13 @@ const SellerProfile = () => {
 
     try {
       // Загружаем данные продавца по ID через API сервис
-      const sellerData = await sellerService.getSeller(parseInt(sellerId));
+      const sellerData = await sellerService.getSeller(sellerId);
       setSeller(sellerData);
     } catch (error) {
       console.error('Ошибка загрузки профиля продавца:', error);
       // ВРЕМЕННО: моковые данные для верстки
       setSeller({
-        id: parseInt(sellerId || '1'),
+        id: sellerId || 1,
         userId: 1,
         shopName: 'Питомник Ситцевый Сад',
         legalName: 'ООО "Ситцевый Сад"',
