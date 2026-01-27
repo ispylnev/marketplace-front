@@ -2,6 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ShoppingCart, User, Menu, X, LogIn, UserPlus, LogOut, Heart, Package } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { tokenManager } from '../api/client';
+import { cartService } from '../api/cartService';
 import SearchBar from './SearchBar';
 import heroBg from '../assets/8e51749862af8a39de8862be61345a3928582e1e.png';
 import vegaLogo from '../assets/9f8522ff5c46c241fe026950d295cfdf39fe881b.png';
@@ -9,6 +10,7 @@ import vegaLogo from '../assets/9f8522ff5c46c241fe026950d295cfdf39fe881b.png';
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [cartCount, setCartCount] = useState(0);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -18,14 +20,36 @@ const Header = () => {
     const checkAuth = () => {
       setIsAuthenticated(tokenManager.isAuthenticated());
     };
-    
+
     checkAuth();
-    
+
     // Слушаем события изменения авторизации
     window.addEventListener('auth-change', checkAuth);
-    
+
     return () => {
       window.removeEventListener('auth-change', checkAuth);
+    };
+  }, []);
+
+  // Загрузка количества товаров в корзине
+  useEffect(() => {
+    const loadCartCount = async () => {
+      try {
+        const count = await cartService.getCartCount();
+        setCartCount(count);
+      } catch (error) {
+        // Корзина может быть недоступна, игнорируем
+      }
+    };
+
+    loadCartCount();
+
+    // Обновляем при изменении корзины
+    const handleCartChange = () => loadCartCount();
+    window.addEventListener('cart-change', handleCartChange);
+
+    return () => {
+      window.removeEventListener('cart-change', handleCartChange);
     };
   }, []);
 
@@ -78,12 +102,14 @@ const Header = () => {
             <button className="hover:text-[#BCCEA9] transition-colors text-white hidden md:block">
               <Package className="w-6 h-6" />
             </button>
-            <button className="hover:text-[#BCCEA9] transition-colors relative text-white">
+            <Link to="/cart" className="hover:text-[#BCCEA9] transition-colors relative text-white">
               <ShoppingCart className="w-6 h-6" />
-              <span className="absolute -top-2 -right-2 bg-[#BCCEA9] text-[#2D2E30] text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                3
-              </span>
-            </button>
+              {cartCount > 0 && (
+                <span className="absolute -top-2 -right-2 bg-[#BCCEA9] text-[#2D2E30] text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {cartCount > 99 ? '99+' : cartCount}
+                </span>
+              )}
+            </Link>
             
             {/* User Menu */}
             <div className="relative" ref={userMenuRef}>

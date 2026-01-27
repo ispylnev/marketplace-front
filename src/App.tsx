@@ -15,6 +15,7 @@ import RegisterStore from './pages/RegisterStore';
 import AdminPanel from './pages/AdminPanel';
 import CreateOffer from './pages/CreateOffer';
 import EditOffer from './pages/EditOffer';
+import Cart from './pages/Cart';
 
 // Layout компонент для страниц с Header/Footer
 function Layout({ children }: { children: React.ReactNode }) {
@@ -40,6 +41,7 @@ function App() {
         
         {/* Страницы с Header/Footer */}
         <Route path="/" element={<Layout><Home /></Layout>} />
+        <Route path="/cart" element={<Cart />} />
         <Route path="/catalog" element={<Layout><Catalog /></Layout>} />
         <Route path="/catalog/:categorySlug" element={<Layout><Catalog /></Layout>} />
         <Route path="/product/:slugWithId" element={<Layout><ProductDetail /></Layout>} />
