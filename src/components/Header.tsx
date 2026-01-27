@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { ShoppingCart, User, Menu, X, LogIn, UserPlus, LogOut, Heart, Package } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
-import { tokenManager } from '../api/client';
+import { useAuth } from '../contexts/AuthContext';
 import { cartService } from '../api/cartService';
 import SearchBar from './SearchBar';
 import heroBg from '../assets/8e51749862af8a39de8862be61345a3928582e1e.png';
@@ -13,23 +13,7 @@ const Header = () => {
   const [cartCount, setCartCount] = useState(0);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-  // Проверка авторизации при загрузке и при изменении
-  useEffect(() => {
-    const checkAuth = () => {
-      setIsAuthenticated(tokenManager.isAuthenticated());
-    };
-
-    checkAuth();
-
-    // Слушаем события изменения авторизации
-    window.addEventListener('auth-change', checkAuth);
-
-    return () => {
-      window.removeEventListener('auth-change', checkAuth);
-    };
-  }, []);
+  const { isAuthenticated, logout } = useAuth();
 
   // Загрузка количества товаров в корзине
   useEffect(() => {
@@ -136,8 +120,7 @@ const Header = () => {
                       </Link>
                       <button
                         onClick={() => {
-                          tokenManager.clearToken();
-                          setIsAuthenticated(false);
+                          logout();
                           setIsUserMenuOpen(false);
                           navigate('/');
                         }}
