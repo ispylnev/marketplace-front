@@ -35,6 +35,8 @@ export function SellerModerationTab({ sellers, onApprove, onReject, onBlock }: S
     setProcessingId(id);
     try {
       await onApprove(id);
+    } catch {
+      // Ошибка обрабатывается в родительском компоненте
     } finally {
       setProcessingId(null);
     }
@@ -55,6 +57,8 @@ export function SellerModerationTab({ sellers, onApprove, onReject, onBlock }: S
         delete newState[id];
         return newState;
       });
+    } catch {
+      // Ошибка обрабатывается в родительском компоненте
     } finally {
       setProcessingId(null);
     }
@@ -75,6 +79,8 @@ export function SellerModerationTab({ sellers, onApprove, onReject, onBlock }: S
         delete newState[id];
         return newState;
       });
+    } catch {
+      // Ошибка обрабатывается в родительском компоненте
     } finally {
       setProcessingId(null);
     }

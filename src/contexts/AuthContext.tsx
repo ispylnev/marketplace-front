@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, ReactNode 
 import { tokenManager } from '../api/client';
 import { UserInfo } from '../types';
 import apiClient from '../api/client';
+import { cartService } from '../api/cartService';
 
 /**
  * Роли пользователей
@@ -165,6 +166,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       // Уведомляем другие компоненты об изменении авторизации
       window.dispatchEvent(new Event('auth-change'));
+
+      // Объединяем анонимную корзину с пользовательской
+      try {
+        await cartService.mergeCartsOnLogin();
+        window.dispatchEvent(new CustomEvent('cart-change'));
+      } catch {
+        // Игнорируем ошибки merge — не критично
+      }
     } catch (error: any) {
       const message = error.response?.data?.message || 'Ошибка входа';
       setState(prev => ({

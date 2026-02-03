@@ -327,6 +327,10 @@ export interface SuggestItem {
   type: 'offer' | 'plant' | 'category';
   id: number;
   subtext?: string;
+  /** ID категории (для plant) */
+  categoryId?: number;
+  /** Название категории (для plant) */
+  categoryName?: string;
 }
 
 // Ответ группированного автокомплита
@@ -334,6 +338,47 @@ export interface SuggestGroupedResponse {
   offers: SuggestItem[];
   plants: SuggestItem[];
   categories: SuggestItem[];
+}
+
+// ==================== Catalog Suggest (Taxonomy + Products) ====================
+
+/** Элемент таксономии из catalog suggest */
+export interface CatalogTaxonomyItem {
+  type: 'taxonomy';
+  id: number;
+  name: string;
+  scientificName?: string;
+  commonName?: string;
+  taxonRank?: string;
+  imageUrl?: string;
+  // Care attributes (дефолтные значения)
+  lightRequirement?: string;
+  wateringFrequency?: string;
+  humidityLevel?: string;
+  temperatureMin?: number;
+  temperatureMax?: number;
+  careDifficulty?: string;
+}
+
+/** Элемент продукта из catalog suggest */
+export interface CatalogProductItem {
+  type: 'product';
+  id: number;
+  name: string;
+  slug?: string;
+  categoryId?: number;
+  categoryName?: string;
+  brandId?: number;
+  brandName?: string;
+  imageUrl?: string;
+  taxonomyId?: number;
+}
+
+/** Унифицированный ответ автокомплита каталога */
+export interface CatalogSuggestResponse {
+  taxonomy: CatalogTaxonomyItem[];
+  products: CatalogProductItem[];
+  totalCount: number;
 }
 
 // Параметры поиска растений
@@ -459,6 +504,22 @@ export const searchService = {
     }
 
     const response = await apiClient.get<SuggestGroupedResponse>('/api/search/suggest/grouped', {
+      params: { q: query, limit }
+    });
+    return response.data;
+  },
+
+  /**
+   * Автокомплит каталога (taxonomy + products).
+   * Используется в форме создания оффера ("Найдите товар в каталоге").
+   * Возвращает результаты из таксономии (растения) и продуктов (товары).
+   */
+  async suggestCatalog(query: string, limit: number = 10): Promise<CatalogSuggestResponse> {
+    if (!query || query.length < 2) {
+      return { taxonomy: [], products: [], totalCount: 0 };
+    }
+
+    const response = await apiClient.get<CatalogSuggestResponse>('/api/search/catalog/suggest', {
       params: { q: query, limit }
     });
     return response.data;

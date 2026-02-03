@@ -10,16 +10,8 @@ import { SellerResponse } from '../types/seller';
 import { extractId } from '../utils/slugUtils';
 import profileAvatar from '../assets/c5c335b900c25c01ebdade434d4ee2ee9ce87b4b.png';
 import avatarBackground from '../assets/4068108bae8ada353e34675c0c754fb530d30e98.png';
-// Используем существующие изображения для товаров
-import irisImage from '../assets/87e79e75714afaa161e05a571ca2d52d623b3da0.png';
-import succulentsImage from '../assets/889d6c254004778870a70d991285b570401e5625.png';
-import aglaonemaImage from '../assets/edede5ec521bf123dc452869697a1da652638ebf.png';
-import rosesImage from '../assets/fc77825ae35f7b3de820d7b8519acd36b843b53b.png';
-import orchidsImage from '../assets/a3565728ee756ad8a73b7c0ef749167ad0757842.png';
-import ficusImage from '../assets/a522e10182dc3cfa749b0aebde64f00ccca7991d.png';
 
 const SellerProfile = () => {
-  const navigate = useNavigate();
   const { slugWithId } = useParams<{ slugWithId: string }>();
   const sellerId = extractId(slugWithId);
   const [seller, setSeller] = useState<SellerResponse | null>(null);
@@ -99,51 +91,6 @@ const SellerProfile = () => {
     shippingDays: "1-2 дня",
     selfPickup: true
   };
-
-  const products = [
-    {
-      id: 1,
-      name: "Ирис бородатый 'Purple Dream'",
-      price: 450,
-      image: irisImage,
-      inStock: true
-    },
-    {
-      id: 2,
-      name: "Суккуленты (набор)",
-      price: 380,
-      image: succulentsImage,
-      inStock: true
-    },
-    {
-      id: 3,
-      name: "Аглаонема 'Серебряная королева'",
-      price: 520,
-      image: aglaonemaImage,
-      inStock: true
-    },
-    {
-      id: 4,
-      name: "Розы садовые",
-      price: 420,
-      image: rosesImage,
-      inStock: true
-    },
-    {
-      id: 5,
-      name: "Орхидея фаленопсис",
-      price: 650,
-      image: orchidsImage,
-      inStock: true
-    },
-    {
-      id: 6,
-      name: "Фикус Бенджамина",
-      price: 390,
-      image: ficusImage,
-      inStock: true
-    }
-  ];
 
   return (
     <div className="min-h-screen">
@@ -283,44 +230,6 @@ const SellerProfile = () => {
                     </div>
                   </div>
                 )}
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Витрина товаров */}
-            <div className="p-4 md:p-6">
-              <h2 className="text-[#2B4A39] text-xl mb-4">Витрина товаров</h2>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
-                {products.map(product => (
-                  <div key={product.id} className="bg-white rounded-xl overflow-hidden shadow-md hover:shadow-lg transition-shadow border border-[#BCCEA9]/30">
-                    <div className="relative aspect-square overflow-hidden">
-                      <img 
-                        src={product.image} 
-                        alt={product.name} 
-                        className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-                      />
-                    </div>
-                    <div className="p-3">
-                      <h3 className="text-[#2D2E30] text-sm md:text-base mb-2 line-clamp-2 min-h-[2.5rem] md:min-h-[3rem]">
-                        {product.name}
-                      </h3>
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-[#2B4A39] font-bold text-base md:text-lg">{product.price} ₽</span>
-                      </div>
-                      {product.inStock ? (
-                        <Button className="w-full bg-[#BCCEA9] hover:bg-[#a8ba95] text-[#2B4A39] h-8 md:h-9 text-xs md:text-sm" size="sm">
-                          <ShoppingCart className="w-3 h-3 md:w-4 md:h-4 mr-1" />
-                          В корзину
-                        </Button>
-                      ) : (
-                        <Button className="w-full bg-gray-200 text-gray-400 h-8 md:h-9 text-xs md:text-sm cursor-not-allowed" size="sm" disabled>
-                          Нет в наличии
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                ))}
               </div>
             </div>
 

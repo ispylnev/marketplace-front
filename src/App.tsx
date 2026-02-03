@@ -102,12 +102,8 @@ function App() {
               </ProtectedRoute>
             } />
 
-            {/* Admin/Moderator routes */}
-            <Route path="/admin" element={
-              <ProtectedRoute requiredRoles={['ROLE_ADMIN', 'ROLE_MODERATOR']}>
-                <AdminPanel />
-              </ProtectedRoute>
-            } />
+            {/* Admin/Moderator routes - проверка прав внутри AdminPanel */}
+            <Route path="/admin" element={<AdminPanel />} />
           </Routes>
         </ToastProvider>
       </AuthProvider>

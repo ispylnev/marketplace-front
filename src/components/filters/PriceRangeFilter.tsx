@@ -47,7 +47,7 @@ export default function PriceRangeFilter({
   // Debounced callback
   const debouncedOnChange = useCallback(
     (() => {
-      let timeoutId: NodeJS.Timeout;
+      let timeoutId: ReturnType<typeof setTimeout>;
       return (min: string, max: string) => {
         clearTimeout(timeoutId);
         timeoutId = setTimeout(() => {

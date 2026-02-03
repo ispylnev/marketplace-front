@@ -15,5 +15,7 @@ export const API_CONFIG = {
   headers: {
     'Content-Type': 'application/json',
   },
+  // Важно для работы с cookie (анонимная корзина)
+  withCredentials: true,
 };
 

@@ -12,38 +12,20 @@ import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
 import { ImageUploader, UploadedImage } from "../components/ImageUploader";
 import { catalogService, CategoryPublic } from '../api/catalogService';
-import { searchService, SuggestItem } from '../api/searchService';
+import { searchService, CatalogTaxonomyItem, CatalogProductItem } from '../api/searchService';
 import { offerService } from '../api/offerService';
-import { CreateOfferRequest, OfferCondition } from '../types/offer';
+import { CreateOfferRequest, OfferCondition, CategoryAttribute, OfferAttributeRequest } from '../types/offer';
+import { DynamicField } from '../components/DynamicField';
+import {
+  PLANT_CATEGORY_SLUGS, lightingOptions, wateringOptions,
+  humidityOptions, difficultyOptions, toxicityOptions
+} from '../constants/plantOptions';
 
 // Метки для состояния товара
 const conditionLabels: Record<OfferCondition, string> = {
   'NEW': 'Новый',
   'WITH_DEFECTS': 'С дефектами'
 };
-
-// Категории для которых показываем параметры ухода за растениями
-const PLANT_CATEGORY_SLUGS = ['plants', 'indoor-plants', 'outdoor-plants', 'succulents', 'cacti'];
-
-// Опции для параметров растений
-const lightingOptions = [
-  { value: 'LOW', label: 'Тень' },
-  { value: 'MEDIUM', label: 'Полутень' },
-  { value: 'BRIGHT_INDIRECT', label: 'Яркий рассеянный' },
-  { value: 'DIRECT', label: 'Прямой солнечный' }
-];
-
-const wateringOptions = [
-  { value: 'RARE', label: 'Редкий (раз в 2 недели)' },
-  { value: 'MODERATE', label: 'Умеренный (раз в неделю)' },
-  { value: 'FREQUENT', label: 'Частый (2-3 раза в неделю)' }
-];
-
-const difficultyOptions = [
-  { value: 'EASY', label: 'Легко' },
-  { value: 'MEDIUM', label: 'Средне' },
-  { value: 'HARD', label: 'Требует опыта' }
-];
 
 const CreateOffer = () => {
   const navigate = useNavigate();
@@ -57,11 +39,18 @@ const CreateOffer = () => {
   const [selectedCategory, setSelectedCategory] = useState<CategoryPublic | null>(null);
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
 
+  // Атрибуты категории (динамические поля)
+  const [categoryAttributes, setCategoryAttributes] = useState<CategoryAttribute[]>([]);
+  const [attributeValues, setAttributeValues] = useState<Record<string, string | number | boolean | null>>({});
+  const [attributesLoading, setAttributesLoading] = useState(false);
+
   // Поиск товаров
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<SuggestItem[]>([]);
+  const [taxonomyResults, setTaxonomyResults] = useState<CatalogTaxonomyItem[]>([]);
+  const [productResults, setProductResults] = useState<CatalogProductItem[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<SuggestItem | null>(null);
+  const [selectedTaxonomy, setSelectedTaxonomy] = useState<CatalogTaxonomyItem | null>(null);
+  const [selectedProductItem, setSelectedProductItem] = useState<CatalogProductItem | null>(null);
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [useCustomProduct, setUseCustomProduct] = useState(false); // "Другое"
 
@@ -81,11 +70,13 @@ const CreateOffer = () => {
     widthMm: string;
     heightMm: string;
     // Параметры растений
-    lighting: string;
-    watering: string;
-    difficulty: string;
-    petSafe: boolean;
-    airPurifying: boolean;
+    lightRequirement: string;
+    wateringFrequency: string;
+    humidityLevel: string;
+    temperatureMin: string;
+    temperatureMax: string;
+    careDifficulty: string;
+    toxicity: string;
   }>({
     name: '',
     description: '',
@@ -97,25 +88,40 @@ const CreateOffer = () => {
     lengthMm: '',
     widthMm: '',
     heightMm: '',
-    lighting: '',
-    watering: '',
-    difficulty: '',
-    petSafe: false,
-    airPurifying: false
+    lightRequirement: '',
+    wateringFrequency: '',
+    humidityLevel: '',
+    temperatureMin: '',
+    temperatureMax: '',
+    careDifficulty: '',
+    toxicity: ''
   });
 
   // Ошибки валидации
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   // Проверка - является ли категория растительной
-  const isPlantCategory = selectedCategory?.slug
-    ? PLANT_CATEGORY_SLUGS.some(slug => selectedCategory.slug?.includes(slug))
-    : false;
+  // Если выбран таксон — это всегда растение
+  const isPlantCategory = selectedTaxonomy
+    ? true
+    : selectedCategory?.slug
+      ? PLANT_CATEGORY_SLUGS.some(slug => selectedCategory.slug?.includes(slug))
+      : false;
 
   // Загрузка категорий при монтировании
   useEffect(() => {
     loadCategories();
   }, []);
+
+  // Загрузка атрибутов категории при выборе категории
+  useEffect(() => {
+    if (selectedCategory) {
+      loadCategoryAttributes(selectedCategory.id);
+    } else {
+      setCategoryAttributes([]);
+      setAttributeValues({});
+    }
+  }, [selectedCategory]);
 
   const loadCategories = async () => {
     try {
@@ -127,24 +133,62 @@ const CreateOffer = () => {
     }
   };
 
+  const loadCategoryAttributes = async (categoryId: number) => {
+    setAttributesLoading(true);
+    try {
+      const attrs = await catalogService.getCategoryAttributes(categoryId);
+      setCategoryAttributes(attrs);
+      // Сбрасываем значения при смене категории
+      setAttributeValues({});
+    } catch (err) {
+      console.error('Ошибка загрузки атрибутов категории:', err);
+      // Не показываем ошибку - атрибуты опциональны
+      setCategoryAttributes([]);
+    } finally {
+      setAttributesLoading(false);
+    }
+  };
+
+  const handleAttributeChange = (code: string, value: string | number | boolean | null) => {
+    setAttributeValues(prev => ({
+      ...prev,
+      [code]: value
+    }));
+    // Очищаем ошибку валидации для этого атрибута
+    if (validationErrors[`attr_${code}`]) {
+      setValidationErrors(prev => {
+        const { [`attr_${code}`]: _, ...rest } = prev;
+        return rest;
+      });
+    }
+  };
+
   // Поиск товаров с дебаунсом
   useEffect(() => {
+    // Не запускаем поиск если товар уже выбран или используется "Другое"
+    if (selectedTaxonomy || selectedProductItem || useCustomProduct) {
+      return;
+    }
+
     const timer = setTimeout(() => {
       if (searchQuery.length >= 2) {
-        searchProducts();
+        searchCatalog();
       } else {
-        setSearchResults([]);
+        setTaxonomyResults([]);
+        setProductResults([]);
+        setShowSearchResults(false);
       }
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [searchQuery, selectedCategory]);
+  }, [searchQuery, selectedTaxonomy, selectedProductItem, useCustomProduct]);
 
-  const searchProducts = async () => {
+  const searchCatalog = async () => {
     setSearchLoading(true);
     try {
-      const response = await searchService.suggestGrouped(searchQuery, 10);
-      setSearchResults(response.plants);
+      const response = await searchService.suggestCatalog(searchQuery, 10);
+      setTaxonomyResults(response.taxonomy);
+      setProductResults(response.products);
       setShowSearchResults(true);
     } catch (err) {
       console.error('Ошибка поиска:', err);
@@ -153,21 +197,52 @@ const CreateOffer = () => {
     }
   };
 
-  const handleSelectProduct = (product: SuggestItem) => {
-    setSelectedProduct(product);
-    setSearchQuery(product.text);
+  const handleSelectTaxonomy = (item: CatalogTaxonomyItem) => {
+    setSelectedTaxonomy(item);
+    setSelectedProductItem(null);
+    setSearchQuery(item.name);
     setShowSearchResults(false);
     setUseCustomProduct(false);
 
-    // Предзаполняем название из выбранного товара
+    // Предзаполняем название и care attributes из таксономии
     setFormData(prev => ({
       ...prev,
-      name: product.text
+      name: item.name,
+      lightRequirement: item.lightRequirement || prev.lightRequirement,
+      wateringFrequency: item.wateringFrequency || prev.wateringFrequency,
+      humidityLevel: item.humidityLevel || prev.humidityLevel,
+      temperatureMin: item.temperatureMin != null ? String(item.temperatureMin) : prev.temperatureMin,
+      temperatureMax: item.temperatureMax != null ? String(item.temperatureMax) : prev.temperatureMax,
+      careDifficulty: item.careDifficulty || prev.careDifficulty,
+    }));
+  };
+
+  const handleSelectProductItem = (item: CatalogProductItem) => {
+    setSelectedProductItem(item);
+    setSelectedTaxonomy(null);
+    setSearchQuery(item.name);
+    setShowSearchResults(false);
+    setUseCustomProduct(false);
+
+    // Устанавливаем категорию из продукта
+    if (item.categoryId) {
+      const category = categories.find(c => c.id === item.categoryId);
+      if (category) {
+        setSelectedCategory(category);
+      }
+    }
+
+    // Предзаполняем название
+    setFormData(prev => ({
+      ...prev,
+      name: item.name,
     }));
   };
 
   const handleSelectOther = () => {
-    setSelectedProduct(null);
+    setSelectedTaxonomy(null);
+    setSelectedProductItem(null);
+    setSelectedCategory(null);
     setUseCustomProduct(true);
     setShowSearchResults(false);
     setSearchQuery('');
@@ -176,10 +251,7 @@ const CreateOffer = () => {
   const handleCategorySelect = (category: CategoryPublic) => {
     setSelectedCategory(category);
     setCategoryDropdownOpen(false);
-    // Сбрасываем выбранный товар при смене категории
-    setSelectedProduct(null);
-    setUseCustomProduct(false);
-    setSearchQuery('');
+    // Для "Другое" не сбрасываем состояние
   };
 
   const handleFormChange = (field: string, value: string | boolean) => {
@@ -195,8 +267,13 @@ const CreateOffer = () => {
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
 
-    if (!selectedProduct && !useCustomProduct) {
+    if (!selectedTaxonomy && !selectedProductItem && !useCustomProduct) {
       errors.product = 'Выберите товар из каталога или укажите "Другое"';
+    }
+
+    // Категория обязательна для "Другое"
+    if (useCustomProduct && !selectedCategory) {
+      errors.category = 'Выберите категорию для товара';
     }
 
     if (!formData.name.trim()) {
@@ -210,6 +287,16 @@ const CreateOffer = () => {
     if (images.length === 0) {
       errors.images = 'Добавьте хотя бы одно фото';
     }
+
+    // Валидация обязательных атрибутов категории
+    categoryAttributes
+      .filter(attr => attr.isRequired)
+      .forEach(attr => {
+        const value = attributeValues[attr.attributeCode];
+        if (value === null || value === undefined || value === '') {
+          errors[`attr_${attr.attributeCode}`] = `Заполните поле "${attr.attributeName}"`;
+        }
+      });
 
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
@@ -228,8 +315,11 @@ const CreateOffer = () => {
         .map(img => img.id);
 
       const request: CreateOfferRequest = {
-        taxonomyId: selectedProduct?.id,
-        name: formData.name.trim(),
+        taxonomyId: selectedTaxonomy?.id,
+        productId: selectedProductItem?.id,
+        // categoryId только для "Другое" (бэкенд игнорирует для выбранного товара)
+        categoryId: useCustomProduct ? selectedCategory?.id : undefined,
+        title: formData.name.trim(),
         description: formData.description.trim() || undefined,
         price: parseFloat(formData.price),
         sku: '', // Генерируется автоматически на бэкенде
@@ -245,14 +335,50 @@ const CreateOffer = () => {
         // Параметры растений (только если выбрана растительная категория)
         ...(isPlantCategory && {
           careAttributes: {
-            lighting: (formData.lighting || undefined) as 'LOW' | 'MEDIUM' | 'BRIGHT_INDIRECT' | 'DIRECT' | undefined,
-            watering: (formData.watering || undefined) as 'RARE' | 'MODERATE' | 'FREQUENT' | undefined,
-            difficulty: (formData.difficulty || undefined) as 'EASY' | 'MEDIUM' | 'HARD' | undefined,
-            petSafe: formData.petSafe || undefined,
-            airPurifying: formData.airPurifying || undefined
+            lightRequirement: formData.lightRequirement || undefined,
+            wateringFrequency: formData.wateringFrequency || undefined,
+            humidityLevel: formData.humidityLevel || undefined,
+            temperatureMin: formData.temperatureMin ? parseInt(formData.temperatureMin) : undefined,
+            temperatureMax: formData.temperatureMax ? parseInt(formData.temperatureMax) : undefined,
+            careDifficulty: formData.careDifficulty || undefined,
+            toxicity: formData.toxicity || undefined
           }
-        })
+        }),
+        // Кастомные атрибуты категории
+        attributes: buildAttributeRequests()
       };
+
+      // Функция для формирования атрибутов в формате API
+      function buildAttributeRequests(): OfferAttributeRequest[] | undefined {
+        const attrs: OfferAttributeRequest[] = [];
+
+        for (const attr of categoryAttributes) {
+          const value = attributeValues[attr.attributeCode];
+          if (value === null || value === undefined || value === '') continue;
+
+          const request: OfferAttributeRequest = {
+            attributeCode: attr.attributeCode
+          };
+
+          switch (attr.attributeType) {
+            case 'STRING':
+            case 'ENUM':
+            case 'DATE':
+              request.valueString = String(value);
+              break;
+            case 'NUMBER':
+              request.valueNumber = Number(value);
+              break;
+            case 'BOOLEAN':
+              request.valueBoolean = Boolean(value);
+              break;
+          }
+
+          attrs.push(request);
+        }
+
+        return attrs.length > 0 ? attrs : undefined;
+      }
 
       await offerService.createOffer(request);
 
@@ -282,7 +408,7 @@ const CreateOffer = () => {
 
   const categoryTree = buildCategoryTree(categories);
 
-  const canProceedToDetails = selectedProduct || useCustomProduct;
+  const canProceedToDetails = selectedTaxonomy || selectedProductItem || useCustomProduct;
 
   return (
     <div className="min-h-screen bg-[#F8F9FA]">
@@ -319,55 +445,13 @@ const CreateOffer = () => {
         )}
 
         <div className="space-y-6">
-          {/* Шаг 1: Выбор категории */}
+          {/* Шаг 1: Поиск товара */}
           <div className="bg-white rounded-xl shadow-sm p-5 md:p-6">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-8 h-8 rounded-full bg-[#2B4A39] text-white flex items-center justify-center text-sm font-semibold">
                 1
               </div>
-              <h2 className="text-lg font-semibold text-[#2D2E30]">Выберите категорию</h2>
-            </div>
-
-            <div className="relative">
-              <button
-                onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
-                className="w-full flex items-center justify-between border border-[#2D2E30]/20 rounded-lg px-4 py-3 text-left hover:border-[#BCCEA9] transition-colors"
-              >
-                <span className={selectedCategory ? 'text-[#2D2E30]' : 'text-[#2D2E30]/50'}>
-                  {selectedCategory?.name || 'Выберите категорию товара'}
-                </span>
-                <ChevronDown className={`w-5 h-5 text-[#2D2E30]/50 transition-transform ${categoryDropdownOpen ? 'rotate-180' : ''}`} />
-              </button>
-
-              {categoryDropdownOpen && (
-                <div className="absolute z-20 w-full mt-1 bg-white border border-[#2D2E30]/20 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-                  {categoryTree.map(({ category, level }) => (
-                    <button
-                      key={category.id}
-                      onClick={() => handleCategorySelect(category)}
-                      className={`w-full px-4 py-2.5 text-left hover:bg-[#BCCEA9]/20 transition-colors flex items-center gap-2 ${
-                        selectedCategory?.id === category.id ? 'bg-[#BCCEA9]/30 text-[#2B4A39]' : 'text-[#2D2E30]'
-                      }`}
-                      style={{ paddingLeft: `${16 + level * 20}px` }}
-                    >
-                      {selectedCategory?.id === category.id && <Check className="w-4 h-4" />}
-                      <span>{category.name}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Шаг 2: Поиск товара */}
-          <div className="bg-white rounded-xl shadow-sm p-5 md:p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
-                selectedCategory ? 'bg-[#2B4A39] text-white' : 'bg-[#2D2E30]/20 text-[#2D2E30]/50'
-              }`}>
-                2
-              </div>
-              <h2 className={`text-lg font-semibold ${selectedCategory ? 'text-[#2D2E30]' : 'text-[#2D2E30]/50'}`}>
+              <h2 className="text-lg font-semibold text-[#2D2E30]">
                 Найдите товар в каталоге
               </h2>
             </div>
@@ -377,11 +461,11 @@ const CreateOffer = () => {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#2D2E30]/50" />
                 <Input
                   type="text"
-                  placeholder={selectedCategory ? 'Введите название растения или сорт...' : 'Сначала выберите категорию'}
+                  placeholder="Введите название растения или сорт..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  onFocus={() => searchResults.length > 0 && setShowSearchResults(true)}
-                  disabled={!selectedCategory || useCustomProduct}
+                  onFocus={() => (taxonomyResults.length > 0 || productResults.length > 0) && setShowSearchResults(true)}
+                  disabled={useCustomProduct || !!selectedTaxonomy || !!selectedProductItem}
                   className="pl-10 pr-10"
                 />
                 {searchLoading && (
@@ -390,25 +474,75 @@ const CreateOffer = () => {
               </div>
 
               {/* Результаты поиска */}
-              {showSearchResults && searchResults.length > 0 && (
+              {showSearchResults && (taxonomyResults.length > 0 || productResults.length > 0) && (
                 <div className="absolute z-20 w-full mt-1 bg-white border border-[#2D2E30]/20 rounded-lg shadow-lg max-h-80 overflow-y-auto">
-                  {searchResults.map((product) => (
-                    <button
-                      key={product.id}
-                      onClick={() => handleSelectProduct(product)}
-                      className="w-full px-4 py-3 text-left hover:bg-[#BCCEA9]/20 transition-colors flex items-start gap-3 border-b border-[#2D2E30]/10"
-                    >
-                      <div className="w-12 h-12 rounded-lg bg-[#BCCEA9]/30 flex items-center justify-center flex-shrink-0">
-                        <Package className="w-6 h-6 text-[#2B4A39]/50" />
+                  {/* Растения из таксономии */}
+                  {taxonomyResults.length > 0 && (
+                    <>
+                      <div className="px-4 py-2 bg-[#BCCEA9]/20 border-b border-[#2D2E30]/10">
+                        <p className="text-xs font-semibold text-[#2B4A39] uppercase tracking-wide flex items-center gap-1.5">
+                          <Leaf className="w-3.5 h-3.5" />
+                          Растения
+                        </p>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-[#2D2E30] truncate">{product.text}</p>
-                        {product.subtext && (
-                          <p className="text-sm text-[#2D2E30]/60 italic truncate">{product.subtext}</p>
-                        )}
+                      {taxonomyResults.map((item) => (
+                        <button
+                          key={`tax-${item.id}`}
+                          onClick={() => handleSelectTaxonomy(item)}
+                          className="w-full px-4 py-3 text-left hover:bg-[#BCCEA9]/20 transition-colors flex items-start gap-3 border-b border-[#2D2E30]/10"
+                        >
+                          <div className="w-12 h-12 rounded-lg bg-[#BCCEA9]/30 flex items-center justify-center flex-shrink-0">
+                            <Leaf className="w-6 h-6 text-[#2B4A39]/50" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-[#2D2E30] truncate">{item.name}</p>
+                            {item.scientificName && (
+                              <p className="text-sm text-[#2D2E30]/60 italic truncate">{item.scientificName}</p>
+                            )}
+                            {item.careDifficulty && (
+                              <p className="text-xs text-[#2B4A39]/70 mt-0.5">
+                                Уход: {item.careDifficulty === 'EASY' ? 'Легко' : item.careDifficulty === 'MEDIUM' ? 'Средне' : 'Требует опыта'}
+                              </p>
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    </>
+                  )}
+
+                  {/* Продукты */}
+                  {productResults.length > 0 && (
+                    <>
+                      <div className="px-4 py-2 bg-blue-50/50 border-b border-[#2D2E30]/10">
+                        <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide flex items-center gap-1.5">
+                          <Package className="w-3.5 h-3.5" />
+                          Товары
+                        </p>
                       </div>
-                    </button>
-                  ))}
+                      {productResults.map((item) => (
+                        <button
+                          key={`prod-${item.id}`}
+                          onClick={() => handleSelectProductItem(item)}
+                          className="w-full px-4 py-3 text-left hover:bg-blue-50/50 transition-colors flex items-start gap-3 border-b border-[#2D2E30]/10"
+                        >
+                          <div className="w-12 h-12 rounded-lg bg-blue-100/50 flex items-center justify-center flex-shrink-0">
+                            <Package className="w-6 h-6 text-blue-500/50" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-[#2D2E30] truncate">{item.name}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              {item.brandName && (
+                                <span className="text-sm text-[#2D2E30]/60">{item.brandName}</span>
+                              )}
+                              {item.categoryName && (
+                                <span className="text-xs text-[#2D2E30]/40 bg-[#2D2E30]/5 px-1.5 py-0.5 rounded">{item.categoryName}</span>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </>
+                  )}
 
                   {/* Опция "Другое" */}
                   <button
@@ -428,7 +562,7 @@ const CreateOffer = () => {
                 </div>
               )}
 
-              {showSearchResults && searchQuery.length >= 2 && searchResults.length === 0 && !searchLoading && (
+              {showSearchResults && searchQuery.length >= 2 && taxonomyResults.length === 0 && productResults.length === 0 && !searchLoading && (
                 <div className="absolute z-20 w-full mt-1 bg-white border border-[#2D2E30]/20 rounded-lg shadow-lg p-4">
                   <p className="text-[#2D2E30]/70 text-center">Товары не найдены</p>
                   <button
@@ -449,26 +583,93 @@ const CreateOffer = () => {
               )}
             </div>
 
-            {/* Выбранный товар */}
-            {selectedProduct && (
+            {/* Выбранное растение (таксономия) */}
+            {selectedTaxonomy && (
               <div className="mt-4 p-4 bg-[#BCCEA9]/20 rounded-lg border border-[#BCCEA9]/50">
                 <div className="flex items-start gap-3">
                   <div className="w-16 h-16 rounded-lg bg-[#BCCEA9]/50 flex items-center justify-center flex-shrink-0">
-                    <Package className="w-8 h-8 text-[#2B4A39]/50" />
+                    <Leaf className="w-8 h-8 text-[#2B4A39]/50" />
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <Check className="w-5 h-5 text-[#2B4A39]" />
-                      <span className="font-semibold text-[#2B4A39]">Товар выбран</span>
+                      <span className="font-semibold text-[#2B4A39]">Растение выбрано</span>
                     </div>
-                    <p className="font-medium text-[#2D2E30] mt-1">{selectedProduct.text}</p>
-                    {selectedProduct.subtext && (
-                      <p className="text-sm text-[#2D2E30]/60 italic">{selectedProduct.subtext}</p>
+                    <p className="font-medium text-[#2D2E30] mt-1">{selectedTaxonomy.name}</p>
+                    {selectedTaxonomy.scientificName && (
+                      <p className="text-sm text-[#2D2E30]/60 italic">{selectedTaxonomy.scientificName}</p>
+                    )}
+                    {/* Подтянутые характеристики */}
+                    {(selectedTaxonomy.lightRequirement || selectedTaxonomy.wateringFrequency || selectedTaxonomy.careDifficulty) && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {selectedTaxonomy.lightRequirement && (
+                          <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <Sun className="w-3 h-3" />
+                            {selectedTaxonomy.lightRequirement === 'LOW' ? 'Тень' :
+                             selectedTaxonomy.lightRequirement === 'MEDIUM' ? 'Полутень' :
+                             selectedTaxonomy.lightRequirement === 'BRIGHT_INDIRECT' ? 'Яркий рассеянный' : 'Прямой'}
+                          </span>
+                        )}
+                        {selectedTaxonomy.wateringFrequency && (
+                          <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <Droplets className="w-3 h-3" />
+                            {selectedTaxonomy.wateringFrequency === 'RARE' ? 'Редкий' :
+                             selectedTaxonomy.wateringFrequency === 'MODERATE' ? 'Умеренный' : 'Частый'}
+                          </span>
+                        )}
+                        {selectedTaxonomy.careDifficulty && (
+                          <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded-full">
+                            {selectedTaxonomy.careDifficulty === 'EASY' ? 'Легко' :
+                             selectedTaxonomy.careDifficulty === 'MEDIUM' ? 'Средне' : 'Требует опыта'}
+                          </span>
+                        )}
+                      </div>
                     )}
                   </div>
                   <button
                     onClick={() => {
-                      setSelectedProduct(null);
+                      setSelectedTaxonomy(null);
+                      setSelectedCategory(null);
+                      setSearchQuery('');
+                      setFormData(prev => ({ ...prev, lightRequirement: '', wateringFrequency: '', humidityLevel: '', temperatureMin: '', temperatureMax: '', careDifficulty: '' }));
+                    }}
+                    className="text-[#2D2E30]/50 hover:text-red-600 transition-colors"
+                  >
+                    Изменить
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Выбранный продукт (товар) */}
+            {selectedProductItem && (
+              <div className="mt-4 p-4 bg-blue-50/50 rounded-lg border border-blue-200/50">
+                <div className="flex items-start gap-3">
+                  <div className="w-16 h-16 rounded-lg bg-blue-100/50 flex items-center justify-center flex-shrink-0">
+                    <Package className="w-8 h-8 text-blue-500/50" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <Check className="w-5 h-5 text-blue-600" />
+                      <span className="font-semibold text-blue-700">Товар выбран</span>
+                    </div>
+                    <p className="font-medium text-[#2D2E30] mt-1">{selectedProductItem.name}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      {selectedProductItem.brandName && (
+                        <span className="text-sm text-[#2D2E30]/60">{selectedProductItem.brandName}</span>
+                      )}
+                      {selectedProductItem.categoryName && (
+                        <p className="text-sm text-blue-600 flex items-center gap-1">
+                          <Tag className="w-4 h-4" />
+                          {selectedProductItem.categoryName}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSelectedProductItem(null);
+                      setSelectedCategory(null);
                       setSearchQuery('');
                     }}
                     className="text-[#2D2E30]/50 hover:text-red-600 transition-colors"
@@ -489,10 +690,51 @@ const CreateOffer = () => {
                     <p className="text-sm text-amber-700 mt-1">
                       Вы указываете товар вручную. После модерации он может быть добавлен в каталог.
                     </p>
+
+                    {/* Селектор категории для "Другое" */}
+                    <div className="mt-4">
+                      <Label className="flex items-center gap-2 mb-2 text-amber-800">
+                        <Tag className="w-4 h-4" />
+                        Выберите категорию <span className="text-red-500">*</span>
+                      </Label>
+                      <div className="relative">
+                        <button
+                          onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
+                          className="w-full flex items-center justify-between bg-white border border-amber-300 rounded-lg px-4 py-2.5 text-left hover:border-amber-400 transition-colors"
+                        >
+                          <span className={selectedCategory ? 'text-[#2D2E30]' : 'text-[#2D2E30]/50'}>
+                            {selectedCategory?.name || 'Выберите категорию товара'}
+                          </span>
+                          <ChevronDown className={`w-5 h-5 text-amber-600 transition-transform ${categoryDropdownOpen ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {categoryDropdownOpen && (
+                          <div className="absolute z-20 w-full mt-1 bg-white border border-[#2D2E30]/20 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                            {categoryTree.map(({ category, level }) => (
+                              <button
+                                key={category.id}
+                                onClick={() => handleCategorySelect(category)}
+                                className={`w-full px-4 py-2.5 text-left hover:bg-amber-50 transition-colors flex items-center gap-2 ${
+                                  selectedCategory?.id === category.id ? 'bg-amber-100 text-amber-800' : 'text-[#2D2E30]'
+                                }`}
+                                style={{ paddingLeft: `${16 + level * 20}px` }}
+                              >
+                                {selectedCategory?.id === category.id && <Check className="w-4 h-4" />}
+                                <span>{category.name}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      {validationErrors.category && (
+                        <p className="text-red-600 text-sm mt-1">{validationErrors.category}</p>
+                      )}
+                    </div>
                   </div>
                   <button
                     onClick={() => {
                       setUseCustomProduct(false);
+                      setSelectedCategory(null);
                       setSearchQuery('');
                     }}
                     className="text-amber-600 hover:text-amber-800 transition-colors text-sm"
@@ -504,7 +746,7 @@ const CreateOffer = () => {
             )}
 
             {/* Подсказка */}
-            {selectedCategory && !selectedProduct && !useCustomProduct && (
+            {!selectedTaxonomy && !selectedProductItem && !useCustomProduct && (
               <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-100 flex items-start gap-2">
                 <HelpCircle className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
                 <p className="text-sm text-blue-700">
@@ -515,13 +757,13 @@ const CreateOffer = () => {
             )}
           </div>
 
-          {/* Шаг 3: Фотографии */}
+          {/* Шаг 2: Фотографии */}
           <div className="bg-white rounded-xl shadow-sm p-5 md:p-6">
             <div className="flex items-center gap-3 mb-4">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
                 canProceedToDetails ? 'bg-[#2B4A39] text-white' : 'bg-[#2D2E30]/20 text-[#2D2E30]/50'
               }`}>
-                3
+                2
               </div>
               <h2 className={`text-lg font-semibold ${canProceedToDetails ? 'text-[#2D2E30]' : 'text-[#2D2E30]/50'}`}>
                 Добавьте фотографии
@@ -541,13 +783,13 @@ const CreateOffer = () => {
             </div>
           </div>
 
-          {/* Шаг 4: Название и описание */}
+          {/* Шаг 3: Название и описание */}
           <div className="bg-white rounded-xl shadow-sm p-5 md:p-6">
             <div className="flex items-center gap-3 mb-4">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
                 canProceedToDetails ? 'bg-[#2B4A39] text-white' : 'bg-[#2D2E30]/20 text-[#2D2E30]/50'
               }`}>
-                4
+                3
               </div>
               <h2 className={`text-lg font-semibold ${canProceedToDetails ? 'text-[#2D2E30]' : 'text-[#2D2E30]/50'}`}>
                 Название и описание
@@ -590,7 +832,7 @@ const CreateOffer = () => {
             </div>
           </div>
 
-          {/* Шаг 5: Параметры растений (только для растительных категорий) */}
+          {/* Шаг 4: Параметры растений (только для растительных категорий) */}
           {isPlantCategory && canProceedToDetails && (
             <div className="bg-white rounded-xl shadow-sm p-5 md:p-6">
               <div className="flex items-center gap-3 mb-4">
@@ -612,8 +854,8 @@ const CreateOffer = () => {
                     Освещение
                   </Label>
                   <select
-                    value={formData.lighting}
-                    onChange={(e) => handleFormChange('lighting', e.target.value)}
+                    value={formData.lightRequirement}
+                    onChange={(e) => handleFormChange('lightRequirement', e.target.value)}
                     className="w-full border border-[#2D2E30]/20 rounded-lg px-3 py-2 focus:outline-none focus:border-[#2B4A39]"
                   >
                     <option value="">Не указано</option>
@@ -630,12 +872,30 @@ const CreateOffer = () => {
                     Полив
                   </Label>
                   <select
-                    value={formData.watering}
-                    onChange={(e) => handleFormChange('watering', e.target.value)}
+                    value={formData.wateringFrequency}
+                    onChange={(e) => handleFormChange('wateringFrequency', e.target.value)}
                     className="w-full border border-[#2D2E30]/20 rounded-lg px-3 py-2 focus:outline-none focus:border-[#2B4A39]"
                   >
                     <option value="">Не указано</option>
                     {wateringOptions.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Влажность */}
+                <div>
+                  <Label className="flex items-center gap-2 mb-2">
+                    <Droplets className="w-4 h-4 text-cyan-500" />
+                    Влажность воздуха
+                  </Label>
+                  <select
+                    value={formData.humidityLevel}
+                    onChange={(e) => handleFormChange('humidityLevel', e.target.value)}
+                    className="w-full border border-[#2D2E30]/20 rounded-lg px-3 py-2 focus:outline-none focus:border-[#2B4A39]"
+                  >
+                    <option value="">Не указано</option>
+                    {humidityOptions.map(opt => (
                       <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
                   </select>
@@ -648,8 +908,8 @@ const CreateOffer = () => {
                     Сложность ухода
                   </Label>
                   <select
-                    value={formData.difficulty}
-                    onChange={(e) => handleFormChange('difficulty', e.target.value)}
+                    value={formData.careDifficulty}
+                    onChange={(e) => handleFormChange('careDifficulty', e.target.value)}
                     className="w-full border border-[#2D2E30]/20 rounded-lg px-3 py-2 focus:outline-none focus:border-[#2B4A39]"
                   >
                     <option value="">Не указано</option>
@@ -660,38 +920,99 @@ const CreateOffer = () => {
                 </div>
               </div>
 
-              {/* Чекбоксы */}
-              <div className="flex flex-wrap gap-4 mt-4">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.petSafe}
-                    onChange={(e) => handleFormChange('petSafe', e.target.checked)}
-                    className="w-4 h-4 rounded border-[#2D2E30]/20 text-[#2B4A39] focus:ring-[#2B4A39]"
+              {/* Температура */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                <div>
+                  <Label className="flex items-center gap-2 mb-2">
+                    <Thermometer className="w-4 h-4 text-red-400" />
+                    Мин. температура (°C)
+                  </Label>
+                  <Input
+                    type="number"
+                    placeholder="напр. 15"
+                    value={formData.temperatureMin}
+                    onChange={(e) => handleFormChange('temperatureMin', e.target.value)}
+                    min="-10"
+                    max="50"
                   />
-                  <span className="text-sm text-[#2D2E30]">Безопасно для питомцев</span>
-                </label>
+                </div>
+                <div>
+                  <Label className="flex items-center gap-2 mb-2">
+                    <Thermometer className="w-4 h-4 text-orange-400" />
+                    Макс. температура (°C)
+                  </Label>
+                  <Input
+                    type="number"
+                    placeholder="напр. 30"
+                    value={formData.temperatureMax}
+                    onChange={(e) => handleFormChange('temperatureMax', e.target.value)}
+                    min="-10"
+                    max="50"
+                  />
+                </div>
+              </div>
 
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.airPurifying}
-                    onChange={(e) => handleFormChange('airPurifying', e.target.checked)}
-                    className="w-4 h-4 rounded border-[#2D2E30]/20 text-[#2B4A39] focus:ring-[#2B4A39]"
-                  />
-                  <span className="text-sm text-[#2D2E30]">Очищает воздух</span>
-                </label>
+              {/* Токсичность */}
+              <div className="mt-4">
+                <Label className="text-[#2D2E30]">Токсичность</Label>
+                <select
+                  value={formData.toxicity}
+                  onChange={(e) => handleFormChange('toxicity', e.target.value)}
+                  className="mt-1 w-full rounded-md border border-[#2D2E30]/20 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2B4A39]"
+                >
+                  <option value="">Не указано</option>
+                  {toxicityOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
               </div>
             </div>
           )}
 
-          {/* Шаг 6: Условия продажи */}
+          {/* Динамические атрибуты категории */}
+          {canProceedToDetails && categoryAttributes.length > 0 && (
+            <div className="bg-white rounded-xl shadow-sm p-5 md:p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-8 h-8 rounded-full bg-[#2B4A39] text-white flex items-center justify-center text-sm font-semibold">
+                  <Tag className="w-4 h-4" />
+                </div>
+                <h2 className="text-lg font-semibold text-[#2D2E30]">
+                  Характеристики товара
+                </h2>
+              </div>
+
+              <p className="text-[#2D2E30]/60 text-sm mb-4">
+                Заполните характеристики товара. Поля со звёздочкой (*) обязательны.
+              </p>
+
+              {attributesLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 text-[#2B4A39] animate-spin" />
+                  <span className="ml-2 text-[#2D2E30]/60">Загрузка характеристик...</span>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {categoryAttributes.map(attr => (
+                    <DynamicField
+                      key={attr.attributeCode}
+                      attribute={attr}
+                      value={attributeValues[attr.attributeCode]}
+                      onChange={(value) => handleAttributeChange(attr.attributeCode, value)}
+                      error={validationErrors[`attr_${attr.attributeCode}`]}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Шаг 5: Условия продажи */}
           <div className="bg-white rounded-xl shadow-sm p-5 md:p-6">
             <div className="flex items-center gap-3 mb-4">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
                 canProceedToDetails ? 'bg-[#2B4A39] text-white' : 'bg-[#2D2E30]/20 text-[#2D2E30]/50'
               }`}>
-                {isPlantCategory ? '6' : '5'}
+                {isPlantCategory || categoryAttributes.length > 0 ? '5' : '4'}
               </div>
               <h2 className={`text-lg font-semibold ${canProceedToDetails ? 'text-[#2D2E30]' : 'text-[#2D2E30]/50'}`}>
                 Условия продажи

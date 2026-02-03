@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Building2, FileText, Phone, Mail, CheckCircle, MapPin, MessageSquare } from 'lucide-react';
+import { Building2, FileText, Phone, CheckCircle, MessageSquare } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Button } from '../components/ui/button';

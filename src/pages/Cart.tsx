@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Trash2, Plus, Minus, ShoppingBag, AlertTriangle, Truck, ChevronRight } from 'lucide-react';
+import { Trash2, Plus, Minus, ShoppingBag, AlertTriangle, Truck, ChevronRight, AlertCircle } from 'lucide-react';
 import Header from '../components/Header';
 import { Button } from '../components/ui/button';
 import { cartService, CartResponse, CartItem, SellerGroup, DeliveryOption } from '../api/cartService';
@@ -10,6 +10,8 @@ const Cart = () => {
   const [cart, setCart] = useState<CartResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<number | null>(null);
+  // Ошибки по offerId: offerId -> сообщение
+  const [itemErrors, setItemErrors] = useState<Record<number, string>>({});
 
   useEffect(() => {
     loadCart();
@@ -29,13 +31,30 @@ const Cart = () => {
   const handleQuantityChange = async (offerId: number, newQuantity: number) => {
     if (newQuantity < 1) return;
 
+    // Очищаем предыдущую ошибку для этого товара
+    setItemErrors(prev => {
+      const next = { ...prev };
+      delete next[offerId];
+      return next;
+    });
+
     setUpdating(offerId);
     try {
       const updatedCart = await cartService.updateQuantity(offerId, newQuantity);
       setCart(updatedCart);
     } catch (error: any) {
       if (error.response?.data?.code === 'INSUFFICIENT_STOCK') {
-        alert(`Недостаточно товара. Доступно: ${error.response.data.available}`);
+        const available = error.response.data.available || 0;
+        const message = available === 0 ? 'Нет в наличии' : `Макс: ${available} шт.`;
+        setItemErrors(prev => ({ ...prev, [offerId]: message }));
+        // Автоочистка через 4 секунды
+        setTimeout(() => {
+          setItemErrors(prev => {
+            const next = { ...prev };
+            delete next[offerId];
+            return next;
+          });
+        }, 4000);
       }
     } finally {
       setUpdating(null);
@@ -69,7 +88,10 @@ const Cart = () => {
     }
   };
 
-  const formatPrice = (price: number) => {
+  const formatPrice = (price: number | undefined | null) => {
+    if (price === undefined || price === null || isNaN(price)) {
+      return '0 ₽';
+    }
     return new Intl.NumberFormat('ru-RU', {
       style: 'currency',
       currency: 'RUB',
@@ -116,7 +138,7 @@ const Cart = () => {
 
       <div className="max-w-6xl mx-auto px-4 py-8">
         <h1 className="text-2xl font-bold text-[#2B4A39] mb-6">
-          Корзина ({cart.summary.itemsCount} {cart.summary.itemsCount === 1 ? 'товар' : 'товаров'})
+          Корзина ({cart.summary.totalItems} {cart.summary.totalItems === 1 ? 'товар' : 'товаров'})
         </h1>
 
         {cart.hasProblematicItems && (
@@ -152,10 +174,10 @@ const Cart = () => {
                 {/* Товары */}
                 <div className="divide-y">
                   {group.items.map((item: CartItem) => (
-                    <div key={item.offerId} className={`p-4 ${!item.isAvailable ? 'bg-red-50' : ''}`}>
+                    <div key={item.offerId} className={`p-4 ${!item.isAvailable ? 'bg-gray-50' : ''}`}>
                       <div className="flex gap-4">
                         {/* Изображение */}
-                        <div className="w-20 h-20 flex-shrink-0 bg-gray-100 rounded-lg overflow-hidden">
+                        <div className={`w-20 h-20 flex-shrink-0 bg-gray-100 rounded-lg overflow-hidden ${!item.isAvailable ? 'opacity-50 grayscale' : ''}`}>
                           {item.imageUrl ? (
                             <img src={item.imageUrl} alt={item.productName} className="w-full h-full object-cover" />
                           ) : (
@@ -167,9 +189,9 @@ const Cart = () => {
 
                         {/* Информация */}
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-medium text-[#2D2E30] line-clamp-2">{item.productName}</h3>
+                          <h3 className={`font-medium line-clamp-2 ${!item.isAvailable ? 'text-gray-400' : 'text-[#2D2E30]'}`}>{item.productName}</h3>
 
-                          {item.warningMessage && (
+                          {item.warningMessage && item.isAvailable && (
                             <p className="text-sm text-orange-600 mt-1 flex items-center gap-1">
                               <AlertTriangle className="w-3 h-3" />
                               {item.warningMessage}
@@ -177,33 +199,50 @@ const Cart = () => {
                           )}
 
                           {!item.isAvailable && (
-                            <p className="text-sm text-red-600 mt-1">Товар недоступен</p>
+                            <span className="inline-flex items-center mt-1 px-2 py-0.5 rounded text-xs font-medium bg-gray-200 text-gray-600">
+                              Товар недоступен
+                            </span>
                           )}
 
                           <div className="flex items-center justify-between mt-3">
                             {/* Количество */}
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => handleQuantityChange(item.offerId, item.quantity - 1)}
-                                disabled={updating === item.offerId || item.quantity <= 1}
-                                className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-100 disabled:opacity-50"
-                              >
-                                <Minus className="w-4 h-4" />
-                              </button>
-                              <span className="w-8 text-center font-medium">{item.quantity}</span>
-                              <button
-                                onClick={() => handleQuantityChange(item.offerId, item.quantity + 1)}
-                                disabled={updating === item.offerId}
-                                className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-100 disabled:opacity-50"
-                              >
-                                <Plus className="w-4 h-4" />
-                              </button>
-                            </div>
+                            {item.isAvailable ? (
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => handleQuantityChange(item.offerId, item.quantity - 1)}
+                                  disabled={updating === item.offerId || item.quantity <= 1}
+                                  className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-100 disabled:opacity-50"
+                                >
+                                  <Minus className="w-4 h-4" />
+                                </button>
+                                <span className="w-8 text-center font-medium">{item.quantity}</span>
+                                <button
+                                  onClick={() => handleQuantityChange(item.offerId, item.quantity + 1)}
+                                  disabled={updating === item.offerId || !!itemErrors[item.offerId]}
+                                  className={`w-8 h-8 rounded-full border flex items-center justify-center disabled:opacity-50 ${
+                                    itemErrors[item.offerId]
+                                      ? 'border-red-300 bg-red-50 cursor-not-allowed'
+                                      : 'border-gray-300 hover:bg-gray-100'
+                                  }`}
+                                >
+                                  <Plus className="w-4 h-4" />
+                                </button>
+                                {/* Inline ошибка */}
+                                {itemErrors[item.offerId] && (
+                                  <span className="text-xs text-red-600 flex items-center gap-1">
+                                    <AlertCircle className="w-3 h-3" />
+                                    {itemErrors[item.offerId]}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-sm text-gray-400">{item.quantity} шт.</span>
+                            )}
 
                             {/* Цена */}
                             <div className="text-right">
-                              <p className="font-semibold text-[#2B4A39]">{formatPrice(item.subtotal)}</p>
-                              {item.priceChanged && (
+                              <p className={`font-semibold ${!item.isAvailable ? 'text-gray-400 line-through' : 'text-[#2B4A39]'}`}>{formatPrice(item.subtotal)}</p>
+                              {item.priceChanged && item.isAvailable && (
                                 <p className="text-xs text-gray-500 line-through">{formatPrice(item.priceSnapshot * item.quantity)}</p>
                               )}
                             </div>
@@ -267,16 +306,16 @@ const Cart = () => {
 
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Товары ({cart.summary.itemsCount})</span>
-                  <span>{formatPrice(cart.summary.subtotal)}</span>
+                  <span className="text-gray-600">Товары ({cart.summary.totalItems})</span>
+                  <span>{formatPrice(cart.summary.itemsPrice)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Доставка</span>
-                  <span>{cart.summary.deliveryTotal > 0 ? formatPrice(cart.summary.deliveryTotal) : 'Выберите'}</span>
+                  <span>{cart.summary.deliveryPrice > 0 ? formatPrice(cart.summary.deliveryPrice) : 'Выберите'}</span>
                 </div>
                 <div className="border-t pt-3 flex justify-between text-lg font-semibold">
                   <span>К оплате</span>
-                  <span className="text-[#2B4A39]">{formatPrice(cart.summary.total)}</span>
+                  <span className="text-[#2B4A39]">{formatPrice(cart.summary.totalPrice)}</span>
                 </div>
               </div>
 

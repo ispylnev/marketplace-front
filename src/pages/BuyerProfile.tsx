@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Star, MessageCircle, Package, MessageSquare, Heart, Users, 
   Settings, FileText, LogOut, Flag, Edit, Camera, Trash2, Upload,
-  LayoutDashboard, Store, Clock, AlertCircle, CheckCircle, XCircle
+  Store, Clock, AlertCircle, CheckCircle, XCircle
 } from "lucide-react";
 import { ProfileMenuItem } from "../components/ProfileMenuItem";
 import { PlantCollection } from "../components/PlantCollection";
@@ -16,7 +16,7 @@ import { Label } from "../components/ui/label";
 import api, { tokenManager } from '../api/client';
 import { userApi, UserProfileResponse } from '../api/user';
 import { sellerService } from '../api/sellerService';
-import { SellerResponse, SellerStatus, SellerStatusLabels } from '../types/seller';
+import { SellerResponse, SellerStatus } from '../types/seller';
 import { UserAvatar, generateInitials } from '../components/UserAvatar';
 import avatarBackground from '../assets/4068108bae8ada353e34675c0c754fb530d30e98.png';
 
@@ -49,7 +49,7 @@ const BuyerProfile = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<UserInfo | null>(null);
   const [profile, setProfile] = useState<UserProfileResponse | null>(null);
-  const [sellerId, setSellerId] = useState<number | null>(null);
+  const [_sellerId, setSellerId] = useState<number | null>(null);
   const [sellerProfile, setSellerProfile] = useState<SellerResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingSellerStatus, setLoadingSellerStatus] = useState(false);
@@ -551,21 +551,12 @@ const BuyerProfile = () => {
 
               {sellerProfile?.status === SellerStatus.APPROVED && (
                 // Одобрен - показываем панель управления
-                <>
-                  <ProfileMenuItem
-                    icon={LayoutDashboard}
-                    label="Панель управления"
-                    onClick={() => navigate('/seller/admin')}
-                  />
-                  {sellerId && (
-                    <ProfileMenuItem
-                      icon={Store}
-                      label="Мой магазин"
-                      onClick={() => navigate(`/seller/${sellerId}`)}
-                      variant="success"
-                    />
-                  )}
-                </>
+                <ProfileMenuItem
+                  icon={Store}
+                  label="Мой магазин"
+                  onClick={() => navigate('/seller/admin')}
+                  variant="success"
+                />
               )}
 
               {sellerProfile?.status === SellerStatus.BLOCKED && (

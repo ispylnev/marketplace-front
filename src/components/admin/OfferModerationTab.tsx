@@ -29,6 +29,8 @@ export function OfferModerationTab({ offers, onApprove, onReject }: OfferModerat
     setProcessingId(id);
     try {
       await onApprove(id);
+    } catch {
+      // Ошибка обрабатывается в родительском компоненте
     } finally {
       setProcessingId(null);
     }
@@ -49,6 +51,8 @@ export function OfferModerationTab({ offers, onApprove, onReject }: OfferModerat
         delete newState[id];
         return newState;
       });
+    } catch {
+      // Ошибка обрабатывается в родительском компоненте
     } finally {
       setProcessingId(null);
     }

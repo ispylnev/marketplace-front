@@ -2,10 +2,10 @@ import apiClient from './client';
 import {
   CreateOfferRequest,
   UpdateOfferRequest,
-  UpdateOfferPriceRequest,
   OfferResponse,
   OfferFilterParams,
-  ProductImageResponse
+  ProductImageResponse,
+  OfferImageResponse
 } from '../types/offer';
 
 /**
@@ -55,17 +55,6 @@ export const offerService = {
     return response.data;
   },
 
-  /**
-   * Обновить только цену оффера
-   * @param offerId ID оффера
-   * @param request Новая цена
-   * @returns Обновлённый оффер
-   */
-  async updateOfferPrice(offerId: number, request: UpdateOfferPriceRequest): Promise<OfferResponse> {
-    const response = await apiClient.put<OfferResponse>(`/api/offers/${offerId}/price`, request);
-    return response.data;
-  },
-
   // ==================== Управление статусом ====================
 
   /**
@@ -108,6 +97,15 @@ export const offerService = {
     return response.data;
   },
 
+  /**
+   * Удалить оффер (soft delete, DISABLED -> DELETED)
+   * Оффер должен быть в статусе DISABLED. Если активен — сначала деактивируйте.
+   * @param offerId ID оффера
+   */
+  async softDeleteOffer(offerId: number): Promise<void> {
+    await apiClient.delete(`/api/seller/admin/offers/${offerId}`);
+  },
+
   // ==================== Публичные эндпоинты ====================
 
   /**
@@ -120,7 +118,65 @@ export const offerService = {
     return response.data;
   },
 
-  // ==================== Изображения ====================
+  // ==================== Изображения офферов ====================
+
+  /**
+   * Получить изображения оффера (только публичные/одобренные)
+   */
+  async getOfferImages(offerId: number): Promise<OfferImageResponse[]> {
+    const response = await apiClient.get<OfferImageResponse[]>(`/api/offers/${offerId}/images`);
+    return response.data;
+  },
+
+  /**
+   * Получить все изображения оффера, включая pending (для seller-view)
+   */
+  async getOfferImagesAll(offerId: number): Promise<OfferImageResponse[]> {
+    const response = await apiClient.get<OfferImageResponse[]>(`/api/offers/${offerId}/images/all`);
+    return response.data;
+  },
+
+  /**
+   * Загрузить изображения к существующему офферу (привязка temp uploads)
+   */
+  async uploadOfferImages(offerId: number, tempImageIds: string[]): Promise<OfferImageResponse[]> {
+    const response = await apiClient.post<OfferImageResponse[]>(
+      `/api/offers/${offerId}/images`,
+      tempImageIds
+    );
+    return response.data;
+  },
+
+  /**
+   * Установить изображение оффера как главное
+   */
+  async setOfferImageAsMain(offerId: number, imageId: number): Promise<OfferImageResponse> {
+    const response = await apiClient.put<OfferImageResponse>(
+      `/api/offers/${offerId}/images/${imageId}/main`
+    );
+    return response.data;
+  },
+
+  /**
+   * Обновить порядок сортировки изображения оффера
+   */
+  async updateOfferImageSortOrder(offerId: number, imageId: number, sortOrder: number): Promise<OfferImageResponse> {
+    const response = await apiClient.put<OfferImageResponse>(
+      `/api/offers/${offerId}/images/${imageId}/order`,
+      null,
+      { params: { sortOrder } }
+    );
+    return response.data;
+  },
+
+  /**
+   * Удалить изображение оффера
+   */
+  async deleteOfferImage(offerId: number, imageId: number): Promise<void> {
+    await apiClient.delete(`/api/offers/${offerId}/images/${imageId}`);
+  },
+
+  // ==================== Изображения товаров ====================
 
   /**
    * Получить изображения товара

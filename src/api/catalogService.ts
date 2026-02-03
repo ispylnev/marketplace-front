@@ -1,4 +1,5 @@
 import apiClient from './client';
+import { CategoryAttribute } from '../types/offer';
 
 /**
  * Публичный сервис каталога (без авторизации)
@@ -126,6 +127,17 @@ export const catalogService = {
    */
   async getAllProductsByCategory(categoryId: number): Promise<ProductPublic[]> {
     const response = await apiClient.get<ProductPublic[]>(`/api/catalog/categories/${categoryId}/products/all`);
+    return response.data;
+  },
+
+  // ==================== Атрибуты категорий ====================
+
+  /**
+   * Получить атрибуты категории (с наследованием от родителей).
+   * Используется при создании оффера для отображения динамических полей.
+   */
+  async getCategoryAttributes(categoryId: number): Promise<CategoryAttribute[]> {
+    const response = await apiClient.get<CategoryAttribute[]>(`/api/categories/${categoryId}/attributes`);
     return response.data;
   },
 };

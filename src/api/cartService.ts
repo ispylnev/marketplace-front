@@ -58,12 +58,15 @@ export interface SellerGroup {
 }
 
 export interface CartSummary {
-  subtotal: number;
-  deliveryTotal: number;
-  total: number;
-  itemsCount: number;
-  uniqueItemsCount: number;
-  currency: string;
+  // Названия полей как на бэкенде
+  itemsPrice: number;
+  deliveryPrice: number;
+  totalPrice: number;
+  totalItems: number;
+  uniqueItems: number;
+  sellersCount: number;
+  availableItemsCount?: number;
+  problematicItemsCount?: number;
 }
 
 export interface CartResponse {

@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { authApi, LoginRequest } from '../api/auth';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
-import { tokenManager } from '../api/client';
 import { ErrorAlert } from '../components/ui/ErrorAlert';
 
 export default function Login() {

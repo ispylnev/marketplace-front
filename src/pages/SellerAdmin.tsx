@@ -1,18 +1,21 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ShoppingBag, Package, TrendingUp, Settings, Check, X, Eye, Edit,
+  ShoppingBag, Package, TrendingUp, Store, Check, X, Eye, Edit,
   Trash2, Plus, Search, LogOut, DollarSign, Users, AlertCircle,
-  Clock
+  Clock, ExternalLink, Camera, Upload
 } from "lucide-react";
 import Header from "../components/Header";
 import { Separator } from "../components/ui/separator";
 import { Button } from "../components/ui/button";
 import { Label } from "../components/ui/label";
 import { Input } from "../components/ui/input";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { tokenManager } from '../api/client';
 import { sellerService } from '../api/sellerService';
 import { offerService } from '../api/offerService';
+import { inventoryService, StockResponse } from '../api/inventoryService';
+import { moderationService, EditRequestResponse } from '../api/moderationService';
 import { OfferResponse, OfferStatus as OfferStatusType } from '../types/offer';
 import { SellerResponse, SellerStatus, SellerStatusLabels } from '../types/seller';
 
@@ -24,6 +27,8 @@ interface Offer {
   imageUrl?: string;
   price: number;
   stock: number;
+  stockId: number | null;
+  inventorySkuId: string | null;
   status: "active" | "pending" | "rejected" | "draft" | "disabled";
   views: number;
   sales: number;
@@ -38,25 +43,31 @@ const mapOfferStatus = (status: OfferStatusType): Offer['status'] => {
     case 'PENDING_REVIEW': return 'pending';
     case 'REJECTED': return 'rejected';
     case 'DISABLED': return 'disabled';
+    case 'DELETED': return 'disabled'; // DELETED не должны приходить, но на всякий случай
     case 'DRAFT':
     default: return 'draft';
   }
 };
 
 // Маппинг OfferResponse -> Offer
-const mapOfferResponseToOffer = (response: OfferResponse): Offer => ({
-  id: response.id,
-  productName: response.title || `Оффер #${response.id}`,
-  latinName: response.latinName,
-  imageUrl: response.thumbnailUrl || response.mainImageUrl,
-  price: response.price,
-  stock: 0, // TODO: интеграция с inventory
-  status: mapOfferStatus(response.status),
-  views: 0, // TODO: статистика
-  sales: 0, // TODO: статистика
-  createdAt: response.createdAt.split('T')[0],
-  rejectionReason: response.rejectionReason
-});
+const mapOfferResponseToOffer = (response: OfferResponse, stockMap: Map<number, StockResponse>): Offer => {
+  const stock = stockMap.get(response.id);
+  return {
+    id: response.id,
+    productName: response.title || `Оффер #${response.id}`,
+    latinName: response.latinName,
+    imageUrl: response.thumbnailUrl || response.mainImageUrl,
+    price: response.price,
+    stock: stock?.quantity ?? 0,
+    stockId: stock?.id ?? null,
+    inventorySkuId: response.inventorySkuId ?? null,
+    status: mapOfferStatus(response.status),
+    views: 0, // TODO: статистика
+    sales: 0, // TODO: статистика
+    createdAt: response.createdAt.split('T')[0],
+    rejectionReason: response.rejectionReason
+  };
+};
 
 interface PopularProduct {
   id: number;
@@ -104,7 +115,8 @@ const SellerAdmin = () => {
   const [loading, setLoading] = useState(true);
   const [sellerProfile, setSellerProfile] = useState<SellerResponse | null>(null);
   const [sellerError, setSellerError] = useState<string | null>(null);
-  const [currentSection, setCurrentSection] = useState<"offers" | "orders" | "stats" | "settings">("offers");
+  const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [currentSection, setCurrentSection] = useState<"shop" | "offers" | "orders" | "stats">("shop");
   const [offers, setOffers] = useState<Offer[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [stats, setStats] = useState<Stats>({
@@ -129,6 +141,13 @@ const SellerAdmin = () => {
   
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [pendingModerationRequests, setPendingModerationRequests] = useState<EditRequestResponse[]>([]);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editForm, setEditForm] = useState({ name: '', description: '' });
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [savingContacts, setSavingContacts] = useState(false);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -155,12 +174,19 @@ const SellerAdmin = () => {
         return;
       }
 
-      // Загружаем офферы продавца
+      // Загружаем офферы и склад продавца
       try {
         console.log('Загружаем офферы...');
-        const offersResponse = await offerService.getMyOffers();
+        const [offersResponse, stocksResponse] = await Promise.all([
+          offerService.getMyOffers(),
+          inventoryService.getMyStocks().catch(() => [] as StockResponse[]),
+        ]);
         console.log('Ответ API офферов:', offersResponse);
-        const mappedOffers = offersResponse.map(mapOfferResponseToOffer);
+
+        const stockMap = new Map<number, StockResponse>();
+        stocksResponse.forEach(s => stockMap.set(s.offerId, s));
+
+        const mappedOffers = offersResponse.map(r => mapOfferResponseToOffer(r, stockMap));
         console.log('Замапленные офферы:', mappedOffers);
         setOffers(mappedOffers);
 
@@ -193,6 +219,14 @@ const SellerAdmin = () => {
         setOffers([]);
       }
 
+      // Загружаем pending-заявки на модерацию
+      try {
+        const pendingRequests = await moderationService.getMyPendingRequests();
+        setPendingModerationRequests(pendingRequests);
+      } catch {
+        // Игнорируем ошибки загрузки заявок на модерацию
+      }
+
       // TODO: загрузка заказов
       setOrders([]);
 
@@ -219,9 +253,19 @@ const SellerAdmin = () => {
     setOrders(orders.map(o => o.id === id ? { ...o, status } : o));
   };
 
-  const deleteOffer = (id: number) => {
-    setOffers(offers.filter(o => o.id !== id));
+  const handleDeleteOffer = async (id: number) => {
+    try {
+      await offerService.softDeleteOffer(id);
+      setOffers(offers.filter(o => o.id !== id));
+      showAction('success', 'Оффер удалён');
+    } catch (error: any) {
+      const msg = error?.response?.data?.message || error?.response?.data?.error || 'Ошибка удаления';
+      showAction('error', msg);
+    }
   };
+
+  const [pendingStockUpdates, setPendingStockUpdates] = useState<Set<number>>(new Set());
+  const [savingStock, setSavingStock] = useState<Set<number>>(new Set());
 
   const updateOfferStock = (id: number, newStock: number) => {
     setOffers(offers.map(o =>
@@ -229,6 +273,41 @@ const SellerAdmin = () => {
         ? { ...o, stock: newStock }
         : o
     ));
+    setPendingStockUpdates(prev => new Set(prev).add(id));
+  };
+
+  const submitStock = async (offer: Offer) => {
+    if (!offer.inventorySkuId) {
+      showAction('error', 'Оффер не одобрен. Склад создаётся после одобрения оффера.');
+      return;
+    }
+    setSavingStock(prev => new Set(prev).add(offer.id));
+    try {
+      const updated = await inventoryService.updateStockBySku(offer.inventorySkuId, { quantity: offer.stock });
+      setOffers(offers.map(o =>
+        o.id === offer.id ? { ...o, stock: updated.quantity } : o
+      ));
+      setPendingStockUpdates(prev => {
+        const next = new Set(prev);
+        next.delete(offer.id);
+        return next;
+      });
+      showAction('success', `Склад обновлён: ${updated.quantity} шт.`);
+    } catch (error: any) {
+      const msg = error?.response?.data?.message || 'Ошибка обновления склада';
+      showAction('error', msg);
+    } finally {
+      setSavingStock(prev => {
+        const next = new Set(prev);
+        next.delete(offer.id);
+        return next;
+      });
+    }
+  };
+
+  const showAction = (type: 'success' | 'error', text: string) => {
+    setActionMessage({ type, text });
+    setTimeout(() => setActionMessage(null), 4000);
   };
 
   // Отправить оффер на модерацию
@@ -236,8 +315,10 @@ const SellerAdmin = () => {
     try {
       await offerService.submitForReview(id);
       setOffers(offers.map(o => o.id === id ? { ...o, status: 'pending' as const } : o));
-    } catch (error) {
-      console.error('Ошибка отправки на модерацию:', error);
+      showAction('success', 'Оффер отправлен на модерацию');
+    } catch (error: any) {
+      const msg = error?.response?.data?.message || 'Ошибка отправки на модерацию';
+      showAction('error', msg);
     }
   };
 
@@ -246,18 +327,22 @@ const SellerAdmin = () => {
     try {
       await offerService.resubmitOffer(id);
       setOffers(offers.map(o => o.id === id ? { ...o, status: 'pending' as const, rejectionReason: undefined } : o));
-    } catch (error) {
-      console.error('Ошибка повторной подачи:', error);
+      showAction('success', 'Оффер повторно отправлен на модерацию');
+    } catch (error: any) {
+      const msg = error?.response?.data?.message || 'Ошибка повторной подачи';
+      showAction('error', msg);
     }
   };
 
-  // Деактивировать оффер
+  // Деактивировать оффер (APPROVED → DISABLED)
   const handleDeactivate = async (id: number) => {
     try {
       await offerService.deactivateOffer(id);
       setOffers(offers.map(o => o.id === id ? { ...o, status: 'disabled' as const } : o));
-    } catch (error) {
-      console.error('Ошибка деактивации:', error);
+      showAction('success', 'Оффер снят с продажи');
+    } catch (error: any) {
+      const msg = error?.response?.data?.message || 'Ошибка деактивации';
+      showAction('error', msg);
     }
   };
 
@@ -266,8 +351,10 @@ const SellerAdmin = () => {
     try {
       await offerService.reactivateOffer(id);
       setOffers(offers.map(o => o.id === id ? { ...o, status: 'active' as const } : o));
-    } catch (error) {
-      console.error('Ошибка реактивации:', error);
+      showAction('success', 'Оффер активирован');
+    } catch (error: any) {
+      const msg = error?.response?.data?.message || 'Ошибка реактивации';
+      showAction('error', msg);
     }
   };
 
@@ -286,6 +373,22 @@ const SellerAdmin = () => {
 
   const newOrdersCount = orders.filter(o => o.status === "new").length;
   const pendingOffersCount = offers.filter(o => o.status === "pending").length;
+
+  // Получаем set полей, находящихся на модерации
+  const pendingFieldNames = new Set<string>();
+  pendingModerationRequests.forEach(req => {
+    req.changes.forEach(change => pendingFieldNames.add(change.fieldName));
+  });
+
+  const ModerationBadge = ({ fieldName }: { fieldName: string }) => {
+    if (!pendingFieldNames.has(fieldName)) return null;
+    return (
+      <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+        <Clock className="w-3 h-3 mr-1" />
+        На модерации
+      </span>
+    );
+  };
 
   if (loading) {
     return (
@@ -352,12 +455,12 @@ const SellerAdmin = () => {
       
       <div className="mx-auto px-4 py-4 md:px-6 md:py-6 lg:px-12 lg:py-8">
         {/* Заголовок */}
-        <div className="mb-6 md:mb-8">
-          <h1 className="text-[#2B4A39] text-2xl md:text-3xl lg:text-4xl mb-2">
-            Панель продавца
+        <div className="mb-6 md:mb-8 bg-[#2B4A39] rounded-xl p-4 md:p-6">
+          <h1 className="text-white text-2xl md:text-3xl lg:text-4xl mb-2">
+            Мой магазин
           </h1>
-          <p className="text-[#2D2E30]/70 text-sm md:text-base">
-            Управление вашим магазином растений
+          <p className="text-white/70 text-sm md:text-base">
+            Управление магазином
           </p>
         </div>
 
@@ -369,6 +472,22 @@ const SellerAdmin = () => {
                 Разделы
               </h2>
               <div className="grid grid-cols-2 lg:grid-cols-1 gap-2 md:gap-3">
+                <button
+                  onClick={() => {
+                    setCurrentSection("shop");
+                    setSearchQuery("");
+                    setFilterStatus("all");
+                  }}
+                  className={`flex flex-col lg:flex-row items-center lg:items-center justify-center lg:justify-start transition-colors px-3 py-3 md:px-4 md:py-3 rounded-lg text-sm md:text-base ${
+                    currentSection === "shop"
+                      ? "bg-[#BCCEA9] text-[#2B4A39]"
+                      : "hover:bg-[#F8F9FA] text-[#2D2E30]"
+                  }`}
+                >
+                  <Store className="w-6 h-6 lg:w-5 lg:h-5 flex-shrink-0 mb-1 lg:mb-0 lg:mr-3" />
+                  <span className="text-center lg:text-left lg:flex-1 text-xs lg:text-base">О магазине</span>
+                </button>
+
                 <button
                   onClick={() => {
                     setCurrentSection("offers");
@@ -426,22 +545,6 @@ const SellerAdmin = () => {
                   <TrendingUp className="w-6 h-6 lg:w-5 lg:h-5 flex-shrink-0 mb-1 lg:mb-0 lg:mr-3" />
                   <span className="text-center lg:text-left lg:flex-1 text-xs lg:text-base">Статистика</span>
                 </button>
-
-                <button
-                  onClick={() => {
-                    setCurrentSection("settings");
-                    setSearchQuery("");
-                    setFilterStatus("all");
-                  }}
-                  className={`flex flex-col lg:flex-row items-center lg:items-center justify-center lg:justify-start transition-colors px-3 py-3 md:px-4 md:py-3 rounded-lg text-sm md:text-base ${
-                    currentSection === "settings"
-                      ? "bg-[#BCCEA9] text-[#2B4A39]"
-                      : "hover:bg-[#F8F9FA] text-[#2D2E30]"
-                  }`}
-                >
-                  <Settings className="w-6 h-6 lg:w-5 lg:h-5 flex-shrink-0 mb-1 lg:mb-0 lg:mr-3" />
-                  <span className="text-center lg:text-left lg:flex-1 text-xs lg:text-base">Настройки</span>
-                </button>
               </div>
 
               <Separator className="bg-[#2D2E30]/10 my-4 md:my-6 hidden lg:block" />
@@ -459,6 +562,17 @@ const SellerAdmin = () => {
 
           {/* Основной контент */}
           <div className="flex-1">
+            {/* Уведомление о действии */}
+            {actionMessage && (
+              <div className={`mb-4 p-3 rounded-lg text-sm font-medium ${
+                actionMessage.type === 'success'
+                  ? 'bg-green-50 text-green-800 border border-green-200'
+                  : 'bg-red-50 text-red-800 border border-red-200'
+              }`}>
+                {actionMessage.text}
+              </div>
+            )}
+
             {/* МОИ ТОВАРЫ (ОФФЕРЫ) */}
             {currentSection === "offers" && (
               <div>
@@ -562,6 +676,7 @@ const SellerAdmin = () => {
                               </div>
                             </div>
 
+                            {offer.status === "active" && (
                             <div className="flex items-center gap-2 md:gap-3 mb-2 md:mb-3">
                               <span className="text-[#2D2E30]/70 text-xs md:text-sm">Склад:</span>
                               <div className="flex items-center border border-[#2D2E30]/20 rounded overflow-hidden">
@@ -574,12 +689,13 @@ const SellerAdmin = () => {
                                 <input
                                   type="number"
                                   min="0"
+                                  max="999999"
                                   value={offer.stock}
-                                  onChange={(e) => updateOfferStock(offer.id, Math.max(0, parseInt(e.target.value) || 0))}
+                                  onChange={(e) => updateOfferStock(offer.id, Math.max(0, Math.min(999999, parseInt(e.target.value) || 0)))}
                                   className="text-center font-semibold focus:outline-none w-12 px-1 py-1 text-xs md:text-sm"
                                 />
                                 <button
-                                  onClick={() => updateOfferStock(offer.id, offer.stock + 1)}
+                                  onClick={() => updateOfferStock(offer.id, Math.min(999999, offer.stock + 1))}
                                   className="px-2 py-1 hover:bg-gray-100 text-[#2D2E30]/70 transition-colors"
                                 >
                                   +
@@ -588,7 +704,23 @@ const SellerAdmin = () => {
                               <span className={`font-semibold text-xs md:text-sm ${offer.stock > 0 ? "text-green-600" : "text-red-600"}`}>
                                 {offer.stock > 0 ? "В наличии" : "Нет"}
                               </span>
+                              {offer.inventorySkuId && (
+                                <Button
+                                  onClick={() => submitStock(offer)}
+                                  disabled={savingStock.has(offer.id) || !pendingStockUpdates.has(offer.id)}
+                                  size="sm"
+                                  className={`text-xs h-7 px-2 ${
+                                    pendingStockUpdates.has(offer.id)
+                                      ? "bg-[#2B4A39] hover:bg-[#1d3527] text-white"
+                                      : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                                  }`}
+                                >
+                                  <Package className="w-3 h-3 mr-1" />
+                                  {savingStock.has(offer.id) ? "Сохранение..." : "Обновить склад"}
+                                </Button>
+                              )}
                             </div>
+                            )}
 
                             <div className="flex flex-wrap gap-1.5 md:gap-2">
                               <Button
@@ -641,15 +773,17 @@ const SellerAdmin = () => {
                                   Активировать
                                 </Button>
                               )}
-                              <Button
-                                onClick={() => deleteOffer(offer.id)}
-                                size="sm"
-                                variant="ghost"
-                                className="text-red-600 hover:text-red-700 text-xs md:text-sm h-8 md:h-9 px-2 md:px-3"
-                              >
-                                <Trash2 className="w-3 h-3 md:w-4 md:h-4 mr-1" />
-                                Удалить
-                              </Button>
+                              {offer.status === "disabled" && (
+                                <Button
+                                  onClick={() => handleDeleteOffer(offer.id)}
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-red-600 hover:text-red-700 text-xs md:text-sm h-8 md:h-9 px-2 md:px-3"
+                                >
+                                  <Trash2 className="w-3 h-3 md:w-4 md:h-4 mr-1" />
+                                  Удалить
+                                </Button>
+                              )}
                             </div>
 
                             {/* Причина отклонения */}
@@ -914,39 +1048,319 @@ const SellerAdmin = () => {
               </div>
             )}
 
-            {/* НАСТРОЙКИ */}
-            {currentSection === "settings" && (
-              <div>
+            {/* О МАГАЗИНЕ */}
+            {currentSection === "shop" && (
+              <div className="flex flex-col gap-4 md:gap-6">
+                {/* Зона A — Модерируемые поля (read-only) */}
+                <div className="bg-white shadow-md rounded-xl p-4 md:p-6">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4 md:mb-6">
+                    <h2 className="text-[#2B4A39] font-semibold text-xl md:text-2xl">
+                      О магазине
+                    </h2>
+                    <div className="flex items-center gap-3">
+                      {sellerProfile && (
+                        <a
+                          href={`/seller/${sellerProfile.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-sm text-[#2B4A39] hover:text-[#1d3527] transition-colors"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                          Открыть публичную страницу
+                        </a>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Уведомление о полях на модерации */}
+                  {pendingModerationRequests.length > 0 && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-sm font-medium text-yellow-800">Некоторые изменения на модерации</p>
+                          <p className="text-sm text-yellow-700 mt-1">
+                            Поля, отмеченные значком "На модерации", ожидают проверки. До одобрения покупатели видят предыдущие значения.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-4 md:gap-6">
+                    {/* Логотип */}
+                    <div>
+                      <Label className="text-[#2B4A39] block mb-2 md:mb-3 text-sm md:text-base">
+                        Логотип <ModerationBadge fieldName="logoUrl" />
+                      </Label>
+                      <div className="flex items-center gap-4">
+                        {sellerProfile?.logoUrl ? (
+                          <img
+                            src={sellerProfile.logoUrl}
+                            alt="Логотип магазина"
+                            className="w-20 h-20 md:w-24 md:h-24 rounded-xl object-cover border border-[#2D2E30]/10"
+                          />
+                        ) : (
+                          <div className="w-20 h-20 md:w-24 md:h-24 rounded-xl bg-[#F8F9FA] border border-[#2D2E30]/10 flex items-center justify-center">
+                            {sellerProfile ? (
+                              <span
+                                className="text-2xl md:text-3xl font-bold text-white rounded-xl w-full h-full flex items-center justify-center"
+                                style={{ backgroundColor: sellerProfile.avatarBackgroundColor }}
+                              >
+                                {sellerProfile.avatarInitials}
+                              </span>
+                            ) : (
+                              <Camera className="w-8 h-8 text-[#2D2E30]/30" />
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label className="text-[#2B4A39] block mb-2 md:mb-3 text-sm md:text-base">
+                        Название магазина <ModerationBadge fieldName="shopName" />
+                      </Label>
+                      <p className="text-[#2D2E30] text-sm md:text-base bg-[#F8F9FA] rounded-lg px-3 py-2 md:px-4 md:py-3">
+                        {shopSettings.name || <span className="text-[#2D2E30]/40 italic">Не указано</span>}
+                      </p>
+                    </div>
+
+                    <div>
+                      <Label className="text-[#2B4A39] block mb-2 md:mb-3 text-sm md:text-base">
+                        Описание магазина <ModerationBadge fieldName="description" />
+                      </Label>
+                      <p className="text-[#2D2E30] text-sm md:text-base bg-[#F8F9FA] rounded-lg px-3 py-2 md:px-4 md:py-3 whitespace-pre-wrap min-h-[60px]">
+                        {shopSettings.description || <span className="text-[#2D2E30]/40 italic">Не указано</span>}
+                      </p>
+                    </div>
+
+                    <Button
+                      onClick={() => {
+                        setEditForm({ name: shopSettings.name, description: shopSettings.description });
+                        setLogoFile(null);
+                        setLogoPreview(null);
+                        setEditDialogOpen(true);
+                      }}
+                      variant="outline"
+                      className="border-[#2B4A39] text-[#2B4A39] hover:bg-[#BCCEA9]/20 w-fit flex items-center gap-2"
+                    >
+                      <Edit className="w-4 h-4" />
+                      Редактировать
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Dialog для редактирования модерируемых полей */}
+                <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+                  <DialogContent className="sm:max-w-[500px]">
+                    <DialogHeader>
+                      <DialogTitle>Редактирование информации о магазине</DialogTitle>
+                      <DialogDescription>
+                        Изменения будут отправлены на модерацию. До одобрения покупатели будут видеть текущие значения.
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="flex flex-col gap-4 py-4">
+                      {/* Логотип */}
+                      <div>
+                        <Label className="text-[#2B4A39] block mb-2 text-sm">
+                          Логотип
+                          {pendingFieldNames.has('logoUrl') && (
+                            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                              <Clock className="w-3 h-3 mr-1" />
+                              Уже на модерации
+                            </span>
+                          )}
+                        </Label>
+                        <div className="flex items-center gap-4">
+                          {/* Текущее / превью */}
+                          {logoPreview ? (
+                            <img
+                              src={logoPreview}
+                              alt="Превью нового логотипа"
+                              className="w-16 h-16 rounded-lg object-cover border border-[#BCCEA9]"
+                            />
+                          ) : sellerProfile?.logoUrl ? (
+                            <img
+                              src={sellerProfile.logoUrl}
+                              alt="Текущий логотип"
+                              className="w-16 h-16 rounded-lg object-cover border border-[#2D2E30]/10"
+                            />
+                          ) : (
+                            <div className="w-16 h-16 rounded-lg bg-[#F8F9FA] border border-[#2D2E30]/10 flex items-center justify-center">
+                              <Camera className="w-6 h-6 text-[#2D2E30]/30" />
+                            </div>
+                          )}
+
+                          {!pendingFieldNames.has('logoUrl') && (
+                            <div className="flex flex-col gap-1">
+                              <label className="cursor-pointer inline-flex items-center gap-1.5 text-sm text-[#2B4A39] hover:text-[#1d3527] transition-colors">
+                                <Upload className="w-4 h-4" />
+                                {logoPreview ? 'Заменить' : 'Загрузить'}
+                                <input
+                                  type="file"
+                                  accept="image/jpeg,image/png,image/webp"
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    if (file.size > 10 * 1024 * 1024) {
+                                      showAction('error', 'Максимальный размер файла — 10 МБ');
+                                      return;
+                                    }
+                                    setLogoFile(file);
+                                    setLogoPreview(URL.createObjectURL(file));
+                                  }}
+                                />
+                              </label>
+                              {logoPreview && (
+                                <button
+                                  onClick={() => {
+                                    if (logoPreview) URL.revokeObjectURL(logoPreview);
+                                    setLogoFile(null);
+                                    setLogoPreview(null);
+                                  }}
+                                  className="text-xs text-red-600 hover:text-red-700 text-left"
+                                >
+                                  Отменить
+                                </button>
+                              )}
+                              <p className="text-xs text-[#2D2E30]/50">JPEG, PNG, WebP. До 10 МБ</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <Label className="text-[#2B4A39] block mb-2 text-sm">
+                          Название магазина
+                          {pendingFieldNames.has('shopName') && (
+                            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                              <Clock className="w-3 h-3 mr-1" />
+                              Уже на модерации
+                            </span>
+                          )}
+                        </Label>
+                        <Input
+                          type="text"
+                          value={editForm.name}
+                          onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                          className="w-full"
+                          disabled={pendingFieldNames.has('shopName')}
+                        />
+                      </div>
+
+                      <div>
+                        <Label className="text-[#2B4A39] block mb-2 text-sm">
+                          Описание магазина
+                          {pendingFieldNames.has('description') && (
+                            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                              <Clock className="w-3 h-3 mr-1" />
+                              Уже на модерации
+                            </span>
+                          )}
+                        </Label>
+                        <textarea
+                          rows={4}
+                          value={editForm.description}
+                          onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                          className="w-full border border-[#2D2E30]/20 focus:outline-none focus:border-[#BCCEA9] px-3 py-2 text-sm rounded-lg resize-none"
+                          disabled={pendingFieldNames.has('description')}
+                        />
+                      </div>
+
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                        <div className="flex items-start gap-2">
+                          <AlertCircle className="w-4 h-4 text-yellow-600 mt-0.5 shrink-0" />
+                          <p className="text-xs text-yellow-700">
+                            Изменения будут отправлены на модерацию и применены после проверки.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <DialogFooter>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          if (logoPreview) URL.revokeObjectURL(logoPreview);
+                          setLogoFile(null);
+                          setLogoPreview(null);
+                          setEditDialogOpen(false);
+                        }}
+                      >
+                        Отмена
+                      </Button>
+                      <Button
+                        onClick={async () => {
+                          setSavingSettings(true);
+                          try {
+                            let hasChanges = false;
+
+                            // 1. Загрузка лого (если выбран файл)
+                            if (logoFile && !pendingFieldNames.has('logoUrl')) {
+                              await sellerService.uploadLogo(logoFile);
+                              hasChanges = true;
+                            }
+
+                            // 2. Текстовые поля
+                            const request: Record<string, string> = {};
+                            if (!pendingFieldNames.has('shopName') && editForm.name !== shopSettings.name) {
+                              request.shopName = editForm.name;
+                            }
+                            if (!pendingFieldNames.has('description') && editForm.description !== shopSettings.description) {
+                              request.description = editForm.description;
+                            }
+
+                            if (Object.keys(request).length > 0) {
+                              await sellerService.updateMySellerProfile(request);
+                              hasChanges = true;
+                            }
+
+                            if (!hasChanges) {
+                              showAction('error', 'Нет изменений для отправки');
+                              setSavingSettings(false);
+                              return;
+                            }
+
+                            showAction('success', 'Изменения отправлены на модерацию');
+                            if (logoPreview) URL.revokeObjectURL(logoPreview);
+                            setLogoFile(null);
+                            setLogoPreview(null);
+                            setEditDialogOpen(false);
+                            // Перезагружаем pending-заявки
+                            try {
+                              const pendingRequests = await moderationService.getMyPendingRequests();
+                              setPendingModerationRequests(pendingRequests);
+                            } catch { /* ignore */ }
+                          } catch (error: any) {
+                            const msg = error?.response?.data?.message || 'Ошибка отправки изменений';
+                            showAction('error', msg);
+                          } finally {
+                            setSavingSettings(false);
+                          }
+                        }}
+                        disabled={savingSettings || (
+                          pendingFieldNames.has('shopName') &&
+                          pendingFieldNames.has('description') &&
+                          pendingFieldNames.has('logoUrl')
+                        )}
+                        className="bg-[#2B4A39] hover:bg-[#234135] text-white"
+                      >
+                        {savingSettings ? 'Отправка...' : 'Отправить на модерацию'}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+
+                {/* Зона B — Контактные данные (прямое редактирование) */}
                 <div className="bg-white shadow-md rounded-xl p-4 md:p-6">
                   <h2 className="text-[#2B4A39] font-semibold text-xl md:text-2xl mb-4 md:mb-6">
-                    Настройки магазина
+                    Контактные данные
                   </h2>
 
                   <div className="flex flex-col gap-4 md:gap-6">
-                    <div>
-                      <Label className="text-[#2B4A39] block mb-2 md:mb-3 text-sm md:text-base">
-                        Название магазина
-                      </Label>
-                      <Input
-                        type="text"
-                        value={shopSettings.name}
-                        onChange={(e) => setShopSettings({...shopSettings, name: e.target.value})}
-                        className="w-full"
-                      />
-                    </div>
-
-                    <div>
-                      <Label className="text-[#2B4A39] block mb-2 md:mb-3 text-sm md:text-base">
-                        Описание магазина
-                      </Label>
-                      <textarea
-                        rows={4}
-                        value={shopSettings.description}
-                        onChange={(e) => setShopSettings({...shopSettings, description: e.target.value})}
-                        className="w-full border border-[#2D2E30]/20 focus:outline-none focus:border-[#BCCEA9] px-3 py-2 md:px-4 md:py-3 text-sm md:text-base rounded-lg resize-none"
-                      />
-                    </div>
-
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
                       <div>
                         <Label className="text-[#2B4A39] block mb-2 md:mb-3 text-sm md:text-base">
@@ -986,9 +1400,26 @@ const SellerAdmin = () => {
                     </div>
 
                     <Button
+                      onClick={async () => {
+                        setSavingContacts(true);
+                        try {
+                          await sellerService.updateMySellerProfile({
+                            contactEmail: shopSettings.email,
+                            contactPhone: shopSettings.phone,
+                            legalAddress: shopSettings.address,
+                          });
+                          showAction('success', 'Контактные данные сохранены');
+                        } catch (error: any) {
+                          const msg = error?.response?.data?.message || 'Ошибка сохранения';
+                          showAction('error', msg);
+                        } finally {
+                          setSavingContacts(false);
+                        }
+                      }}
+                      disabled={savingContacts}
                       className="bg-[#2B4A39] hover:bg-[#234135] text-white px-4 py-2 md:px-6 md:py-3 text-sm md:text-base w-fit"
                     >
-                      Сохранить изменения
+                      {savingContacts ? 'Сохранение...' : 'Сохранить контакты'}
                     </Button>
                   </div>
                 </div>

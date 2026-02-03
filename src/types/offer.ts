@@ -11,7 +11,8 @@ export type OfferStatus =
   | 'PENDING_REVIEW'  // На модерации
   | 'APPROVED'        // Одобрен
   | 'REJECTED'        // Отклонён
-  | 'DISABLED';       // Деактивирован
+  | 'DISABLED'        // Деактивирован
+  | 'DELETED';        // Удалён (soft delete)
 
 export type ImageType = 'MAIN' | 'GALLERY';
 
@@ -45,18 +46,85 @@ export interface ShippingDimensionsResponse extends ShippingDimensions {
 
 // ==================== Request DTOs ====================
 
-/** Параметры ухода за растениями */
+// ==================== Category Attributes ====================
+
+/** Тип атрибута категории */
+export type AttributeType = 'STRING' | 'NUMBER' | 'BOOLEAN' | 'ENUM' | 'DATE';
+
+/** Конфигурация атрибута категории */
+export interface CategoryAttribute {
+  id: number;
+  categoryId: number;
+  /** Код атрибута (используется в API) */
+  attributeCode: string;
+  /** Название атрибута (отображается пользователю) */
+  attributeName: string;
+  /** Название на английском */
+  attributeNameEn?: string;
+  /** Тип атрибута */
+  attributeType: AttributeType;
+  /** Допустимые значения для ENUM типа */
+  enumValues?: string[];
+  /** Человекочитаемые подписи для ENUM значений */
+  enumLabels?: Record<string, string>;
+  /** Единица измерения (для NUMBER) */
+  unit?: string;
+  /** Обязательность заполнения */
+  isRequired?: boolean;
+  /** Минимальное значение (для NUMBER) */
+  minValue?: number;
+  /** Максимальное значение (для NUMBER) */
+  maxValue?: number;
+  /** Максимальная длина строки (для STRING) */
+  maxLength?: number;
+  /** Доступен для фильтрации */
+  isFilterable?: boolean;
+  /** Отображается в карточке товара */
+  isVisible?: boolean;
+  /** Порядок сортировки */
+  sortOrder?: number;
+  /** Группа атрибутов */
+  attributeGroup?: string;
+}
+
+/** Значение атрибута оффера в запросе */
+export interface OfferAttributeRequest {
+  /** Код атрибута */
+  attributeCode: string;
+  /** Строковое значение (для STRING и ENUM) */
+  valueString?: string;
+  /** Числовое значение (для NUMBER) */
+  valueNumber?: number;
+  /** Булево значение (для BOOLEAN) */
+  valueBoolean?: boolean;
+}
+
+/** Значение атрибута оффера в ответе */
+export interface OfferAttributeResponse {
+  id: number;
+  offerId: number;
+  attributeCode: string;
+  valueString?: string;
+  valueNumber?: number;
+  valueBoolean?: boolean;
+}
+
+/** Параметры ухода за растениями (поля совпадают с backend CareAttributesRequest) */
 export interface CareAttributes {
   /** Требования к освещению */
-  lighting?: 'LOW' | 'MEDIUM' | 'BRIGHT_INDIRECT' | 'DIRECT';
+  lightRequirement?: string;
   /** Частота полива */
-  watering?: 'RARE' | 'MODERATE' | 'FREQUENT';
+  wateringFrequency?: string;
+  /** Уровень влажности */
+  humidityLevel?: string;
+  /** Минимальная температура (°C) */
+  temperatureMin?: number;
+  /** Максимальная температура (°C) */
+  temperatureMax?: number;
   /** Сложность ухода */
-  difficulty?: 'EASY' | 'MEDIUM' | 'HARD';
-  /** Безопасно для питомцев */
-  petSafe?: boolean;
-  /** Очищает воздух */
-  airPurifying?: boolean;
+  careDifficulty?: string;
+  /** Токсичность */
+  toxicity?: string;
 }
 
 export interface CreateOfferRequest {
@@ -64,8 +132,10 @@ export interface CreateOfferRequest {
   productId?: number;
   /** ID таксономии (вида/сорта). Если указан, система найдёт активный товар */
   taxonomyId?: number;
+  /** ID категории. Обязательно только для "Другое" (когда productId и taxonomyId не указаны) */
+  categoryId?: number;
   /** Название оффера (отображается покупателям) */
-  name?: string;
+  title?: string;
   /** Описание оффера */
   description?: string;
   /** Цена */
@@ -88,6 +158,8 @@ export interface CreateOfferRequest {
   imageIds?: string[];
   /** Параметры ухода (для растений) */
   careAttributes?: CareAttributes;
+  /** Кастомные атрибуты оффера (определяются категорией) */
+  attributes?: OfferAttributeRequest[];
 }
 
 export interface UpdateOfferRequest {
@@ -105,13 +177,26 @@ export interface UpdateOfferRequest {
   warrantyMonths?: number;
   /** Логистические характеристики */
   shipping?: ShippingDimensions;
-}
 
-export interface UpdateOfferPriceRequest {
-  /** Новая цена */
-  price: number;
-  /** Валюта */
-  currency?: string;
+  // === Поля карточки (подлежат модерации для APPROVED офферов) ===
+
+  /** Название оффера */
+  title?: string;
+  /** Описание оффера */
+  description?: string;
+  /** ID категории */
+  categoryId?: number;
+  /** ID таксономии */
+  taxonomyId?: number;
+  /** ID бренда */
+  brandId?: number;
+
+  // === Атрибуты (применяются напрямую, без модерации) ===
+
+  /** Параметры ухода (для растений) */
+  careAttributes?: CareAttributes;
+  /** Кастомные атрибуты оффера (определяются категорией) */
+  attributes?: OfferAttributeRequest[];
 }
 
 // ==================== Response DTOs ====================
@@ -139,12 +224,50 @@ export interface OfferResponse {
   updatedAt: string;
   /** Название оффера или продукта */
   title?: string;
+  /** Описание оффера */
+  description?: string;
   /** Латинское (научное) название растения */
   latinName?: string;
+
+  // === Категория и таксономия ===
+
+  /** ID категории */
+  categoryId?: number;
+  /** Название категории */
+  categoryName?: string;
+  /** Slug категории */
+  categorySlug?: string;
+  /** ID таксономии */
+  taxonomyId?: number;
+  /** Научное название таксона */
+  taxonomyScientificName?: string;
+  /** Русское название таксона */
+  taxonomyCommonName?: string;
+
   /** URL главного изображения */
   mainImageUrl?: string;
   /** URL миниатюры главного изображения */
   thumbnailUrl?: string;
+
+  // === Атрибуты ухода за растением ===
+
+  lightRequirement?: string;
+  wateringFrequency?: string;
+  humidityLevel?: string;
+  temperatureMin?: number;
+  temperatureMax?: number;
+  careDifficulty?: string;
+  soilType?: string;
+  growthRate?: string;
+  maxHeightCm?: number;
+  toxicity?: string;
+
+  // === Динамические атрибуты категории ===
+
+  attributes?: OfferAttributeResponse[];
+
+  /** Поля, ожидающие модерации: fieldName -> "На модерации" */
+  pendingChanges?: Record<string, string>;
 }
 
 export interface ThumbnailResponse {
@@ -176,6 +299,28 @@ export interface ProductImageResponse {
    * @see https://blurha.sh/
    */
   blurhash?: string;
+  createdAt: string;
+}
+
+export type ImageModerationStatus = 'APPROVED' | 'PENDING_MODERATION';
+
+/** Изображение оффера (такая же структура как ProductImageResponse, но с offerId) */
+export interface OfferImageResponse {
+  id: number;
+  offerId: number;
+  url: string;
+  originalFilename: string;
+  contentType: string;
+  fileSize: number;
+  width?: number;
+  height?: number;
+  imageType: ImageType;
+  sortOrder: number;
+  processingStatus: ProcessingStatus;
+  thumbnails: Record<'sm' | 'md' | 'lg', ThumbnailResponse>;
+  blurhash?: string;
+  /** Статус модерации изображения */
+  moderationStatus?: ImageModerationStatus;
   createdAt: string;
 }
 
