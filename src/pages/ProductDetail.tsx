@@ -6,15 +6,29 @@ import { extractId } from '../utils/slugUtils';
 import { offerService } from '../api/offerService';
 import { sellerService } from '../api/sellerService';
 import { cartService } from '../api/cartService';
+import { inventoryService } from '../api/inventoryService';
+import { useFavorites } from '../contexts/FavoritesContext';
+import { useAuth } from '../contexts/AuthContext';
 import { OfferResponse, OfferImageResponse } from '../types/offer';
 import { SellerResponse } from '../types/seller';
+
+function pluralize(n: number, one: string, few: string, many: string): string {
+  const abs = Math.abs(n);
+  const mod10 = abs % 10;
+  const mod100 = abs % 100;
+  if (mod100 >= 11 && mod100 <= 19) return many;
+  if (mod10 === 1) return one;
+  if (mod10 >= 2 && mod10 <= 4) return few;
+  return many;
+}
 
 const ProductDetail = () => {
   const { slugWithId } = useParams();
   const navigate = useNavigate();
   const id = extractId(slugWithId);
+  const { isAuthenticated } = useAuth();
+  const { isFavorited, toggleFavorite } = useFavorites();
   const [selectedImage, setSelectedImage] = useState(0);
-  const [isFavorite, setIsFavorite] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'description' | 'care' | 'specs'>('care');
 
@@ -24,6 +38,10 @@ const ProductDetail = () => {
   const [seller, setSeller] = useState<SellerResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Состояние наличия
+  const [availableQuantity, setAvailableQuantity] = useState<number | null>(null);
+  const [isInStock, setIsInStock] = useState<boolean | null>(null);
 
   // Состояние корзины
   const [quantity, setQuantity] = useState(1);
@@ -48,7 +66,8 @@ const ProductDetail = () => {
   }, [cartError]);
 
   // Обработчики количества
-  const incrementQuantity = () => setQuantity(prev => Math.min(prev + 1, 99));
+  const maxQuantity = availableQuantity !== null ? Math.min(availableQuantity, 99) : 99;
+  const incrementQuantity = () => setQuantity(prev => Math.min(prev + 1, maxQuantity));
   const decrementQuantity = () => setQuantity(prev => Math.max(prev - 1, 1));
 
   // Добавить в корзину
@@ -67,6 +86,8 @@ const ProductDetail = () => {
         setCartError(available === 0 ? 'Нет в наличии' : `Доступно только ${available} шт.`);
       } else if (errorData?.code === 'OFFER_NOT_AVAILABLE') {
         setCartError('Товар недоступен');
+      } else if (errorData?.error) {
+        setCartError(errorData.error);
       } else {
         setCartError('Не удалось добавить');
       }
@@ -91,9 +112,12 @@ const ProductDetail = () => {
         setCartError(available === 0 ? 'Нет в наличии' : `Доступно только ${available} шт.`);
       } else if (errorData?.code === 'OFFER_NOT_AVAILABLE') {
         setCartError('Товар недоступен');
+      } else if (errorData?.error) {
+        setCartError(errorData.error);
       } else {
         setCartError('Не удалось добавить');
       }
+    } finally {
       setIsAddingToCart(false);
     }
   };
@@ -111,13 +135,19 @@ const ProductDetail = () => {
         setLoading(true);
         setError(null);
 
-        const [offerData, imagesData] = await Promise.all([
+        const [offerData, imagesData, availability] = await Promise.all([
           offerService.getOffer(id),
-          offerService.getOfferImages(id).catch(() => [] as OfferImageResponse[])
+          offerService.getOfferImages(id).catch(() => [] as OfferImageResponse[]),
+          inventoryService.checkAvailability(id).catch(() => null),
         ]);
 
         setOffer(offerData);
         setImages(imagesData);
+
+        if (availability) {
+          setIsInStock(availability.available);
+          setAvailableQuantity(availability.availableQuantity);
+        }
 
         // Загружаем данные продавца
         if (offerData.sellerId) {
@@ -344,11 +374,15 @@ const ProductDetail = () => {
               {/* Actions under image */}
               <div className="flex items-center justify-center gap-6 mt-4 pt-4 border-t">
                 <button
-                  onClick={() => setIsFavorite(!isFavorite)}
+                  onClick={() => {
+                    if (isAuthenticated && offer) {
+                      toggleFavorite(offer.id);
+                    }
+                  }}
                   className="flex items-center gap-2 text-gray-600 hover:text-primary-600 transition-colors"
                 >
-                  <Heart className={`w-5 h-5 ${isFavorite ? 'fill-red-500 text-red-500' : ''}`} />
-                  <span className="text-sm">В избранное</span>
+                  <Heart className={`w-5 h-5 ${isAuthenticated && offer && isFavorited(offer.id) ? 'fill-red-500 text-red-500' : ''}`} />
+                  <span className="text-sm">{isAuthenticated && offer && isFavorited(offer.id) ? 'В избранном' : 'В избранное'}</span>
                 </button>
               </div>
             </div>
@@ -443,12 +477,12 @@ const ProductDetail = () => {
                         </div>
                       </div>
                     )}
-                    {offer.temperatureMin !== undefined && offer.temperatureMax !== undefined && offer.temperatureMin >= 0 && (
+                    {offer.temperatureMin !== undefined && offer.temperatureMax !== undefined && offer.temperatureMin !== null && offer.temperatureMax !== null && (
                       <div className="flex items-center gap-3 p-3 bg-red-50 rounded-xl">
                         <Thermometer className="w-5 h-5 text-red-400 flex-shrink-0" />
                         <div>
                           <div className="text-xs text-gray-500">Температура</div>
-                          <div className="text-sm font-medium text-gray-800">{offer.temperatureMin}–{offer.temperatureMax}°C</div>
+                          <div className="text-sm font-medium text-gray-800">от {offer.temperatureMin}°C до {offer.temperatureMax}°C</div>
                         </div>
                       </div>
                     )}
@@ -499,39 +533,50 @@ const ProductDetail = () => {
 
               {/* Stock */}
               <div className="flex items-center gap-2">
-                <span className="flex items-center gap-1.5 text-green-600 text-sm font-medium">
-                  <Check className="w-4 h-4" />
-                  В наличии
-                </span>
+                {isInStock === null ? (
+                  <span className="text-sm text-gray-400">Проверяем наличие...</span>
+                ) : isInStock ? (
+                  <span className="flex items-center gap-1.5 text-green-600 text-sm font-medium">
+                    <Check className="w-4 h-4" />
+                    В наличии{availableQuantity !== null && availableQuantity <= 5 && ` (осталось ${availableQuantity} шт.)`}
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5 text-red-500 text-sm font-medium">
+                    <AlertCircle className="w-4 h-4" />
+                    Нет в наличии
+                  </span>
+                )}
               </div>
 
               {/* Quantity selector */}
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-gray-600">Количество:</span>
-                <div className="flex items-center border border-gray-200 rounded-xl">
-                  <button
-                    onClick={decrementQuantity}
-                    disabled={quantity <= 1}
-                    className="p-2 hover:bg-gray-100 rounded-l-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Minus className="w-4 h-4" />
-                  </button>
-                  <span className="px-4 py-2 text-center min-w-[3rem] font-medium">{quantity}</span>
-                  <button
-                    onClick={incrementQuantity}
-                    disabled={quantity >= 99}
-                    className="p-2 hover:bg-gray-100 rounded-r-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
+              {isInStock !== false && (
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-gray-600">Количество:</span>
+                  <div className="flex items-center border border-gray-200 rounded-xl">
+                    <button
+                      onClick={decrementQuantity}
+                      disabled={quantity <= 1}
+                      className="p-2 hover:bg-gray-100 rounded-l-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Minus className="w-4 h-4" />
+                    </button>
+                    <span className="px-4 py-2 text-center min-w-[3rem] font-medium">{quantity}</span>
+                    <button
+                      onClick={incrementQuantity}
+                      disabled={quantity >= maxQuantity}
+                      className="p-2 hover:bg-gray-100 rounded-r-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Buttons */}
               <div className="space-y-2">
                 <button
                   onClick={handleAddToCart}
-                  disabled={isAddingToCart || isAdded}
+                  disabled={isAddingToCart || isAdded || isInStock === false}
                   className={`w-full py-3 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 disabled:cursor-not-allowed ${
                     isAdded
                       ? 'bg-green-500 text-white'
@@ -557,7 +602,7 @@ const ProductDetail = () => {
                 </button>
                 <button
                   onClick={handleBuyNow}
-                  disabled={isAddingToCart}
+                  disabled={isAddingToCart || isInStock === false}
                   className="w-full py-3 bg-accent-500 hover:bg-accent-600 text-white rounded-xl font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Купить сейчас
@@ -644,7 +689,7 @@ const ProductDetail = () => {
                           </div>
                           {seller.reviewCount !== undefined && seller.reviewCount > 0 && (
                             <span className="text-xs text-gray-400">
-                              · {seller.reviewCount} {seller.reviewCount === 1 ? 'отзыв' : seller.reviewCount < 5 ? 'отзыва' : 'отзывов'}
+                              · {seller.reviewCount} {pluralize(seller.reviewCount, 'отзыв', 'отзыва', 'отзывов')}
                             </span>
                           )}
                         </div>

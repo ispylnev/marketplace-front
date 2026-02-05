@@ -1,12 +1,14 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
+import { FavoritesProvider } from './contexts/FavoritesContext';
 import { ProtectedRoute, GuestRoute } from './components/ProtectedRoute';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import Home from './pages/Home';
 import Catalog from './pages/Catalog';
 import ProductDetail from './pages/ProductDetail';
+import Favorites from './pages/Favorites';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Profile from './pages/Profile';
@@ -19,6 +21,8 @@ import AdminPanel from './pages/AdminPanel';
 import CreateOffer from './pages/CreateOffer';
 import EditOffer from './pages/EditOffer';
 import Cart from './pages/Cart';
+import Checkout from './pages/Checkout';
+import MyOrders from './pages/MyOrders';
 
 // Layout with Header/Footer
 function Layout({ children }: { children: React.ReactNode }) {
@@ -37,6 +41,7 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <FavoritesProvider>
         <ToastProvider>
           <Routes>
             {/* Guest routes (redirect if authenticated) */}
@@ -59,9 +64,24 @@ function App() {
             <Route path="/seller/:slugWithId" element={<SellerProfile />} />
 
             {/* Protected routes (auth required) */}
+            <Route path="/favorites" element={
+              <ProtectedRoute authOnly>
+                <Layout><Favorites /></Layout>
+              </ProtectedRoute>
+            } />
             <Route path="/cart" element={
               <ProtectedRoute authOnly>
                 <Cart />
+              </ProtectedRoute>
+            } />
+            <Route path="/checkout" element={
+              <ProtectedRoute authOnly>
+                <Checkout />
+              </ProtectedRoute>
+            } />
+            <Route path="/orders" element={
+              <ProtectedRoute authOnly>
+                <MyOrders />
               </ProtectedRoute>
             } />
             <Route path="/profile" element={
@@ -102,10 +122,15 @@ function App() {
               </ProtectedRoute>
             } />
 
-            {/* Admin/Moderator routes - проверка прав внутри AdminPanel */}
-            <Route path="/admin" element={<AdminPanel />} />
+            {/* Admin/Moderator routes */}
+            <Route path="/admin" element={
+              <ProtectedRoute requiredRoles={['ROLE_ADMIN', 'ROLE_MODERATOR']}>
+                <AdminPanel />
+              </ProtectedRoute>
+            } />
           </Routes>
         </ToastProvider>
+        </FavoritesProvider>
       </AuthProvider>
     </BrowserRouter>
   );

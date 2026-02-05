@@ -7,7 +7,7 @@ import { Filter, Grid, List, Loader2, ChevronRight, ChevronLeft, AlertCircle } f
 import { Product } from '../types';
 import { catalogService, CategoryPublic } from '../api/catalogService';
 import { searchService, OfferSearchParams, OfferSearchResponse, OfferFacets } from '../api/searchService';
-import { extractId } from '../utils/slugUtils';
+import { extractId, makeFullSlug } from '../utils/slugUtils';
 
 const Catalog = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -138,6 +138,7 @@ const Catalog = () => {
       const convertedProducts: Product[] = response.hits.map(hit => ({
         id: String(hit.offerId),
         name: hit.title,
+        fullSlug: makeFullSlug(hit.title, hit.offerId),
         price: hit.price ? formatPrice(hit.price) : 'Цена не указана',
         image: hit.mainImageUrl || hit.mainImageThumbnailUrl || 'https://via.placeholder.com/300',
         rating: hit.sellerRating || 0,

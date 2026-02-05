@@ -465,7 +465,7 @@ const BuyerProfile = () => {
             {/* Основное меню */}
             <div className="py-2">
               <ProfileMenuItem icon={MessageCircle} label="Сообщения" />
-              <ProfileMenuItem icon={Package} label="История заказов" />
+              <ProfileMenuItem icon={Package} label="Мои заказы" onClick={() => navigate('/orders')} />
               <ProfileMenuItem icon={MessageSquare} label="Мои отзывы" />
               <ProfileMenuItem icon={Heart} label="Избранное" />
               <ProfileMenuItem icon={Users} label="Подписки" />

@@ -5,11 +5,21 @@ import Header from '../components/Header';
 import { Button } from '../components/ui/button';
 import { cartService, CartResponse, CartItem, SellerGroup, DeliveryOption } from '../api/cartService';
 
+function pluralize(n: number, one: string, few: string, many: string): string {
+  const abs = Math.abs(n);
+  const mod10 = abs % 10;
+  const mod100 = abs % 100;
+  if (mod100 >= 11 && mod100 <= 19) return many;
+  if (mod10 === 1) return one;
+  if (mod10 >= 2 && mod10 <= 4) return few;
+  return many;
+}
+
 const Cart = () => {
   const navigate = useNavigate();
   const [cart, setCart] = useState<CartResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [updating, setUpdating] = useState<number | null>(null);
+  const [updatingIds, setUpdatingIds] = useState<Set<number>>(new Set());
   // Ошибки по offerId: offerId -> сообщение
   const [itemErrors, setItemErrors] = useState<Record<number, string>>({});
 
@@ -38,7 +48,7 @@ const Cart = () => {
       return next;
     });
 
-    setUpdating(offerId);
+    setUpdatingIds(prev => new Set(prev).add(offerId));
     try {
       const updatedCart = await cartService.updateQuantity(offerId, newQuantity);
       setCart(updatedCart);
@@ -47,7 +57,6 @@ const Cart = () => {
         const available = error.response.data.available || 0;
         const message = available === 0 ? 'Нет в наличии' : `Макс: ${available} шт.`;
         setItemErrors(prev => ({ ...prev, [offerId]: message }));
-        // Автоочистка через 4 секунды
         setTimeout(() => {
           setItemErrors(prev => {
             const next = { ...prev };
@@ -57,19 +66,27 @@ const Cart = () => {
         }, 4000);
       }
     } finally {
-      setUpdating(null);
+      setUpdatingIds(prev => {
+        const next = new Set(prev);
+        next.delete(offerId);
+        return next;
+      });
     }
   };
 
   const handleRemoveItem = async (offerId: number) => {
-    setUpdating(offerId);
+    setUpdatingIds(prev => new Set(prev).add(offerId));
     try {
       const updatedCart = await cartService.removeItem(offerId);
       setCart(updatedCart);
     } catch (error) {
       console.error('Ошибка удаления:', error);
     } finally {
-      setUpdating(null);
+      setUpdatingIds(prev => {
+        const next = new Set(prev);
+        next.delete(offerId);
+        return next;
+      });
     }
   };
 
@@ -138,7 +155,7 @@ const Cart = () => {
 
       <div className="max-w-6xl mx-auto px-4 py-8">
         <h1 className="text-2xl font-bold text-[#2B4A39] mb-6">
-          Корзина ({cart.summary.totalItems} {cart.summary.totalItems === 1 ? 'товар' : 'товаров'})
+          Корзина ({cart.summary.totalItems} {pluralize(cart.summary.totalItems, 'товар', 'товара', 'товаров')})
         </h1>
 
         {cart.hasProblematicItems && (
@@ -210,7 +227,7 @@ const Cart = () => {
                               <div className="flex items-center gap-2">
                                 <button
                                   onClick={() => handleQuantityChange(item.offerId, item.quantity - 1)}
-                                  disabled={updating === item.offerId || item.quantity <= 1}
+                                  disabled={updatingIds.has(item.offerId) || item.quantity <= 1}
                                   className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-100 disabled:opacity-50"
                                 >
                                   <Minus className="w-4 h-4" />
@@ -218,7 +235,7 @@ const Cart = () => {
                                 <span className="w-8 text-center font-medium">{item.quantity}</span>
                                 <button
                                   onClick={() => handleQuantityChange(item.offerId, item.quantity + 1)}
-                                  disabled={updating === item.offerId || !!itemErrors[item.offerId]}
+                                  disabled={updatingIds.has(item.offerId) || !!itemErrors[item.offerId]}
                                   className={`w-8 h-8 rounded-full border flex items-center justify-center disabled:opacity-50 ${
                                     itemErrors[item.offerId]
                                       ? 'border-red-300 bg-red-50 cursor-not-allowed'
@@ -250,7 +267,7 @@ const Cart = () => {
                             {/* Удалить */}
                             <button
                               onClick={() => handleRemoveItem(item.offerId)}
-                              disabled={updating === item.offerId}
+                              disabled={updatingIds.has(item.offerId)}
                               className="text-gray-400 hover:text-red-500 p-2"
                             >
                               <Trash2 className="w-5 h-5" />

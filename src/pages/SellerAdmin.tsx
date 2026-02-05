@@ -12,7 +12,7 @@ import { Label } from "../components/ui/label";
 import { Input } from "../components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { tokenManager } from '../api/client';
-import { sellerService } from '../api/sellerService';
+import { sellerService, SellerOrderResponse } from '../api/sellerService';
 import { offerService } from '../api/offerService';
 import { inventoryService, StockResponse } from '../api/inventoryService';
 import { moderationService, EditRequestResponse } from '../api/moderationService';
@@ -27,6 +27,8 @@ interface Offer {
   imageUrl?: string;
   price: number;
   stock: number;
+  reservedQuantity: number;
+  availableQuantity: number;
   stockId: number | null;
   inventorySkuId: string | null;
   status: "active" | "pending" | "rejected" | "draft" | "disabled";
@@ -59,6 +61,8 @@ const mapOfferResponseToOffer = (response: OfferResponse, stockMap: Map<number, 
     imageUrl: response.thumbnailUrl || response.mainImageUrl,
     price: response.price,
     stock: stock?.quantity ?? 0,
+    reservedQuantity: stock?.reservedQuantity ?? 0,
+    availableQuantity: stock?.availableQuantity ?? 0,
     stockId: stock?.id ?? null,
     inventorySkuId: response.inventorySkuId ?? null,
     status: mapOfferStatus(response.status),
@@ -76,19 +80,25 @@ interface PopularProduct {
   soldCount: number;
 }
 
-interface Order {
-  id: number;
-  orderNumber: string;
-  customer: string;
-  customerEmail: string;
-  customerPhone: string;
-  products: { name: string; quantity: number; price: number }[];
-  totalAmount: number;
-  status: "new" | "processing" | "shipped" | "delivered" | "cancelled";
-  paymentStatus: "paid" | "pending" | "refunded";
-  createdAt: string;
-  shippingAddress: string;
-}
+const orderStatusLabels: Record<string, string> = {
+  PENDING: 'Ожидает оплаты',
+  PAID: 'Оплачен',
+  PROCESSING: 'В обработке',
+  SHIPPED: 'Отправлен',
+  DELIVERED: 'Доставлен',
+  COMPLETED: 'Завершён',
+  CANCELLED: 'Отменён',
+};
+
+const orderStatusColors: Record<string, string> = {
+  PENDING: 'bg-gray-100 text-gray-800',
+  PAID: 'bg-blue-100 text-blue-800',
+  PROCESSING: 'bg-yellow-100 text-yellow-800',
+  SHIPPED: 'bg-purple-100 text-purple-800',
+  DELIVERED: 'bg-green-100 text-green-800',
+  COMPLETED: 'bg-green-200 text-green-900',
+  CANCELLED: 'bg-red-100 text-red-800',
+};
 
 interface Stats {
   totalRevenue: number;
@@ -118,7 +128,7 @@ const SellerAdmin = () => {
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [currentSection, setCurrentSection] = useState<"shop" | "offers" | "orders" | "stats">("shop");
   const [offers, setOffers] = useState<Offer[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<SellerOrderResponse[]>([]);
   const [stats, setStats] = useState<Stats>({
     totalRevenue: 0,
     totalOrders: 0,
@@ -177,10 +187,12 @@ const SellerAdmin = () => {
       // Загружаем офферы и склад продавца
       try {
         console.log('Загружаем офферы...');
-        const [offersResponse, stocksResponse] = await Promise.all([
+        const [offersResponse, stocksResponse, breakdownResponse] = await Promise.all([
           offerService.getMyOffers(),
           inventoryService.getMyStocks().catch(() => [] as StockResponse[]),
+          sellerService.getReservedBreakdown().catch(() => ({} as Record<string, Record<string, number>>)),
         ]);
+        setReservedBreakdown(breakdownResponse);
         console.log('Ответ API офферов:', offersResponse);
 
         const stockMap = new Map<number, StockResponse>();
@@ -227,8 +239,13 @@ const SellerAdmin = () => {
         // Игнорируем ошибки загрузки заявок на модерацию
       }
 
-      // TODO: загрузка заказов
-      setOrders([]);
+      // Загружаем заказы продавца
+      try {
+        const sellerOrders = await sellerService.getSellerOrders();
+        setOrders(sellerOrders);
+      } catch {
+        setOrders([]);
+      }
 
       setLoading(false);
     } catch (error: any) {
@@ -249,8 +266,37 @@ const SellerAdmin = () => {
     navigate('/');
   };
 
-  const updateOrderStatus = (id: number, status: Order["status"]) => {
-    setOrders(orders.map(o => o.id === id ? { ...o, status } : o));
+  const handleAcceptOrder = async (orderId: number) => {
+    try {
+      const updated = await sellerService.acceptOrder(orderId);
+      setOrders(orders.map(o => o.id === orderId ? updated : o));
+      showAction('success', 'Заказ принят в обработку');
+    } catch (error: any) {
+      const msg = error?.response?.data?.message || 'Ошибка при принятии заказа';
+      showAction('error', msg);
+    }
+  };
+
+  const handleShipOrder = async (orderId: number) => {
+    try {
+      const updated = await sellerService.shipOrder(orderId);
+      setOrders(orders.map(o => o.id === orderId ? updated : o));
+      showAction('success', 'Заказ отправлен');
+    } catch (error: any) {
+      const msg = error?.response?.data?.message || 'Ошибка при отправке заказа';
+      showAction('error', msg);
+    }
+  };
+
+  const handleDeliverOrder = async (orderId: number) => {
+    try {
+      const updated = await sellerService.deliverOrder(orderId);
+      setOrders(orders.map(o => o.id === orderId ? updated : o));
+      showAction('success', 'Заказ доставлен');
+    } catch (error: any) {
+      const msg = error?.response?.data?.message || 'Ошибка при подтверждении доставки';
+      showAction('error', msg);
+    }
   };
 
   const handleDeleteOffer = async (id: number) => {
@@ -264,13 +310,14 @@ const SellerAdmin = () => {
     }
   };
 
+  const [reservedBreakdown, setReservedBreakdown] = useState<Record<string, Record<string, number>>>({});
   const [pendingStockUpdates, setPendingStockUpdates] = useState<Set<number>>(new Set());
   const [savingStock, setSavingStock] = useState<Set<number>>(new Set());
 
-  const updateOfferStock = (id: number, newStock: number) => {
+  const updateOfferStock = (id: number, newAvailable: number) => {
     setOffers(offers.map(o =>
       o.id === id
-        ? { ...o, stock: newStock }
+        ? { ...o, availableQuantity: newAvailable, stock: newAvailable + o.reservedQuantity }
         : o
     ));
     setPendingStockUpdates(prev => new Set(prev).add(id));
@@ -283,16 +330,20 @@ const SellerAdmin = () => {
     }
     setSavingStock(prev => new Set(prev).add(offer.id));
     try {
-      const updated = await inventoryService.updateStockBySku(offer.inventorySkuId, { quantity: offer.stock });
+      // quantity = доступное + зарезервированное
+      const totalQuantity = offer.availableQuantity + offer.reservedQuantity;
+      const updated = await inventoryService.updateStockBySku(offer.inventorySkuId, { quantity: totalQuantity });
       setOffers(offers.map(o =>
-        o.id === offer.id ? { ...o, stock: updated.quantity } : o
+        o.id === offer.id
+          ? { ...o, stock: updated.quantity, reservedQuantity: updated.reservedQuantity, availableQuantity: updated.availableQuantity }
+          : o
       ));
       setPendingStockUpdates(prev => {
         const next = new Set(prev);
         next.delete(offer.id);
         return next;
       });
-      showAction('success', `Склад обновлён: ${updated.quantity} шт.`);
+      showAction('success', `Склад обновлён: доступно ${updated.availableQuantity} шт.`);
     } catch (error: any) {
       const msg = error?.response?.data?.message || 'Ошибка обновления склада';
       showAction('error', msg);
@@ -366,12 +417,11 @@ const SellerAdmin = () => {
 
   const filteredOrders = orders.filter(o => {
     if (filterStatus !== "all" && o.status !== filterStatus) return false;
-    if (searchQuery && !o.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) && 
-        !o.customer.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (searchQuery && !o.orderNumber.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
   });
 
-  const newOrdersCount = orders.filter(o => o.status === "new").length;
+  const newOrdersCount = orders.filter(o => o.status === "PAID").length;
   const pendingOffersCount = offers.filter(o => o.status === "pending").length;
 
   // Получаем set полей, находящихся на модерации
@@ -677,48 +727,83 @@ const SellerAdmin = () => {
                             </div>
 
                             {offer.status === "active" && (
-                            <div className="flex items-center gap-2 md:gap-3 mb-2 md:mb-3">
-                              <span className="text-[#2D2E30]/70 text-xs md:text-sm">Склад:</span>
-                              <div className="flex items-center border border-[#2D2E30]/20 rounded overflow-hidden">
-                                <button
-                                  onClick={() => updateOfferStock(offer.id, Math.max(0, offer.stock - 1))}
-                                  className="px-2 py-1 hover:bg-gray-100 text-[#2D2E30]/70 transition-colors"
-                                >
-                                  -
-                                </button>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max="999999"
-                                  value={offer.stock}
-                                  onChange={(e) => updateOfferStock(offer.id, Math.max(0, Math.min(999999, parseInt(e.target.value) || 0)))}
-                                  className="text-center font-semibold focus:outline-none w-12 px-1 py-1 text-xs md:text-sm"
-                                />
-                                <button
-                                  onClick={() => updateOfferStock(offer.id, Math.min(999999, offer.stock + 1))}
-                                  className="px-2 py-1 hover:bg-gray-100 text-[#2D2E30]/70 transition-colors"
-                                >
-                                  +
-                                </button>
+                            <div className="mb-2 md:mb-3">
+                              <div className="flex items-center gap-2 md:gap-3">
+                                <span className="text-[#2D2E30]/70 text-xs md:text-sm">Доступно:</span>
+                                <div className="flex items-center border border-[#2D2E30]/20 rounded overflow-hidden">
+                                  <button
+                                    onClick={() => updateOfferStock(offer.id, Math.max(0, offer.availableQuantity - 1))}
+                                    className="px-2 py-1 hover:bg-gray-100 text-[#2D2E30]/70 transition-colors"
+                                  >
+                                    -
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="999999"
+                                    value={offer.availableQuantity}
+                                    onChange={(e) => updateOfferStock(offer.id, Math.max(0, Math.min(999999, parseInt(e.target.value) || 0)))}
+                                    className="text-center font-semibold focus:outline-none w-12 px-1 py-1 text-xs md:text-sm"
+                                  />
+                                  <button
+                                    onClick={() => updateOfferStock(offer.id, Math.min(999999, offer.availableQuantity + 1))}
+                                    className="px-2 py-1 hover:bg-gray-100 text-[#2D2E30]/70 transition-colors"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                                <span className={`font-semibold text-xs md:text-sm ${offer.availableQuantity > 0 ? "text-green-600" : "text-red-600"}`}>
+                                  {offer.availableQuantity > 0 ? "В наличии" : "Нет в наличии"}
+                                </span>
+                                {offer.inventorySkuId && (
+                                  <Button
+                                    onClick={() => submitStock(offer)}
+                                    disabled={savingStock.has(offer.id) || !pendingStockUpdates.has(offer.id)}
+                                    size="sm"
+                                    className={`text-xs h-7 px-2 ${
+                                      pendingStockUpdates.has(offer.id)
+                                        ? "bg-[#2B4A39] hover:bg-[#1d3527] text-white"
+                                        : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                                    }`}
+                                  >
+                                    <Package className="w-3 h-3 mr-1" />
+                                    {savingStock.has(offer.id) ? "Сохранение..." : "Обновить склад"}
+                                  </Button>
+                                )}
                               </div>
-                              <span className={`font-semibold text-xs md:text-sm ${offer.stock > 0 ? "text-green-600" : "text-red-600"}`}>
-                                {offer.stock > 0 ? "В наличии" : "Нет"}
-                              </span>
-                              {offer.inventorySkuId && (
-                                <Button
-                                  onClick={() => submitStock(offer)}
-                                  disabled={savingStock.has(offer.id) || !pendingStockUpdates.has(offer.id)}
-                                  size="sm"
-                                  className={`text-xs h-7 px-2 ${
-                                    pendingStockUpdates.has(offer.id)
-                                      ? "bg-[#2B4A39] hover:bg-[#1d3527] text-white"
-                                      : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                                  }`}
-                                >
-                                  <Package className="w-3 h-3 mr-1" />
-                                  {savingStock.has(offer.id) ? "Сохранение..." : "Обновить склад"}
-                                </Button>
-                              )}
+                              {offer.reservedQuantity > 0 && (() => {
+                                const breakdown = reservedBreakdown[String(offer.id)];
+                                const statusLabels: Record<string, string> = {
+                                  PAID: 'Оплачено',
+                                  PROCESSING: 'В обработке',
+                                  SHIPPED: 'В пути',
+                                  DELIVERED: 'Доставлено',
+                                };
+                                const statusColors: Record<string, string> = {
+                                  PAID: 'text-blue-600',
+                                  PROCESSING: 'text-yellow-600',
+                                  SHIPPED: 'text-purple-600',
+                                  DELIVERED: 'text-green-600',
+                                };
+                                if (breakdown && Object.keys(breakdown).length > 0) {
+                                  return (
+                                    <p className="text-xs mt-1 ml-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                                      {Object.entries(breakdown)
+                                        .filter(([, qty]) => qty > 0)
+                                        .map(([status, qty]) => (
+                                          <span key={status} className={statusColors[status] || 'text-orange-500'}>
+                                            {statusLabels[status] || status}: {qty} шт.
+                                          </span>
+                                        ))}
+                                    </p>
+                                  );
+                                }
+                                return (
+                                  <p className="text-xs text-orange-500 mt-1 ml-0.5">
+                                    В резерве: {offer.reservedQuantity} шт.
+                                  </p>
+                                );
+                              })()}
                             </div>
                             )}
 
@@ -823,7 +908,7 @@ const SellerAdmin = () => {
                         <Search className="absolute text-[#2D2E30]/50 left-3 top-1/2 -translate-y-1/2 w-4 h-4 md:w-5 md:h-5" />
                         <Input
                           type="text"
-                          placeholder="Поиск..."
+                          placeholder="Поиск по номеру заказа..."
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
                           className="pl-10"
@@ -835,11 +920,12 @@ const SellerAdmin = () => {
                         className="border border-[#2D2E30]/20 focus:outline-none focus:border-[#BCCEA9] px-3 py-2 md:py-3 text-sm md:text-base rounded-lg"
                       >
                         <option value="all">Все статусы</option>
-                        <option value="new">Новые</option>
-                        <option value="processing">В обработке</option>
-                        <option value="shipped">Отправлено</option>
-                        <option value="delivered">Доставлено</option>
-                        <option value="cancelled">Отменено</option>
+                        <option value="PAID">Оплачен</option>
+                        <option value="PROCESSING">В обработке</option>
+                        <option value="SHIPPED">Отправлен</option>
+                        <option value="DELIVERED">Доставлен</option>
+                        <option value="COMPLETED">Завершён</option>
+                        <option value="CANCELLED">Отменён</option>
                       </select>
                     </div>
                   </div>
@@ -853,57 +939,80 @@ const SellerAdmin = () => {
                               {order.orderNumber}
                             </h3>
                             <span className={`self-start rounded-full font-semibold text-xs px-2 py-1 md:px-3 md:py-1 ${
-                              order.status === "new" ? "bg-blue-100 text-blue-800" :
-                              order.status === "processing" ? "bg-yellow-100 text-yellow-800" :
-                              order.status === "shipped" ? "bg-purple-100 text-purple-800" :
-                              order.status === "delivered" ? "bg-green-100 text-green-800" :
-                              "bg-red-100 text-red-800"
+                              orderStatusColors[order.status] || 'bg-gray-100 text-gray-800'
                             }`}>
-                              {order.status === "new" ? "Новый" :
-                               order.status === "processing" ? "В обработке" :
-                               order.status === "shipped" ? "Отправлен" :
-                               order.status === "delivered" ? "Доставлен" : "Отменен"}
+                              {orderStatusLabels[order.status] || order.status}
                             </span>
                           </div>
-                          
-                          <div className="text-[#2D2E30]/70 text-xs md:text-sm mb-3 md:mb-4 flex flex-col gap-1 md:gap-1.5">
-                            <p className="font-semibold text-[#2D2E30]">{order.customer}</p>
-                            <p>📧 {order.customerEmail}</p>
-                            <p>📱 {order.customerPhone}</p>
-                            <p>📍 {order.shippingAddress}</p>
-                            <p>📅 {order.createdAt}</p>
-                          </div>
+
+                          {order.deliveryAddress && (
+                            <div className="text-[#2D2E30]/70 text-xs md:text-sm mb-3 md:mb-4 flex flex-col gap-1 md:gap-1.5">
+                              <p className="font-semibold text-[#2D2E30]">{order.deliveryAddress.recipientName}</p>
+                              <p>{order.deliveryAddress.recipientPhone}</p>
+                              <p>{[order.deliveryAddress.city, order.deliveryAddress.street, order.deliveryAddress.building, order.deliveryAddress.apartment].filter(Boolean).join(', ')}</p>
+                            </div>
+                          )}
+
+                          <p className="text-[#2D2E30]/50 text-xs mb-3">
+                            {new Date(order.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            {order.paymentMethod && <span className="ml-2">· {order.paymentMethod === 'CARD' ? 'Картой' : order.paymentMethod === 'SBP' ? 'СБП' : 'Наложенный платёж'}</span>}
+                          </p>
+
+                          {order.buyerComment && (
+                            <p className="text-xs text-[#2D2E30]/60 mb-3 italic">
+                              Комментарий: {order.buyerComment}
+                            </p>
+                          )}
 
                           <div className="bg-[#F8F9FA] rounded-lg p-3 md:p-4 mb-3 md:mb-4">
                             <p className="text-[#2D2E30]/70 font-semibold text-xs md:text-sm mb-2 md:mb-3">Товары:</p>
-                            {order.products.map((product, idx) => (
-                              <div key={idx} className="flex justify-between text-xs md:text-sm mb-1.5">
-                                <span className="text-[#2D2E30]">{product.name} × {product.quantity}</span>
-                                <span className="text-[#2B4A39] font-semibold">{product.price * product.quantity} ₽</span>
+                            {order.items.map((item) => (
+                              <div key={item.id} className="flex items-center gap-3 text-xs md:text-sm mb-2">
+                                {item.productImageUrl && (
+                                  <img src={item.productImageUrl} alt={item.productName} className="w-10 h-10 rounded object-cover flex-shrink-0" />
+                                )}
+                                <span className="text-[#2D2E30] flex-1 min-w-0 truncate">{item.productName}</span>
+                                <span className="text-[#2D2E30]/60 flex-shrink-0">{item.quantity} × {item.pricePerUnit} ₽</span>
+                                <span className="text-[#2B4A39] font-semibold flex-shrink-0">{item.totalPrice} ₽</span>
                               </div>
                             ))}
+                            {order.deliveryPrice > 0 && (
+                              <>
+                                <Separator className="bg-[#2D2E30]/10 my-2" />
+                                <div className="flex justify-between text-xs md:text-sm">
+                                  <span className="text-[#2D2E30]/60">Доставка{order.deliveryMethodName ? ` (${order.deliveryMethodName})` : ''}</span>
+                                  <span className="text-[#2D2E30]">{order.deliveryPrice} ₽</span>
+                                </div>
+                              </>
+                            )}
                             <Separator className="bg-[#2D2E30]/10 my-2 md:my-3" />
                             <div className="flex justify-between font-bold text-sm md:text-base lg:text-lg">
                               <span className="text-[#2D2E30]">Итого:</span>
                               <span className="text-[#2B4A39]">{order.totalAmount} ₽</span>
                             </div>
                           </div>
+
+                          {order.cancellationReason && (
+                            <div className="p-2 bg-red-50 rounded text-xs md:text-sm text-red-700 mb-3">
+                              <strong>Причина отмены:</strong> {order.cancellationReason}
+                            </div>
+                          )}
                         </div>
 
                         <div className="flex flex-wrap gap-2">
-                          {order.status === "new" && (
+                          {order.status === "PAID" && (
                             <Button
-                              onClick={() => updateOrderStatus(order.id, "processing")}
+                              onClick={() => handleAcceptOrder(order.id)}
                               size="sm"
                               className="bg-[#BCCEA9] hover:bg-[#a8ba95] text-[#2B4A39] text-xs md:text-sm h-8 md:h-9 px-2 md:px-3"
                             >
                               <Check className="w-3 h-3 md:w-4 md:h-4 mr-1" />
-                              Принять
+                              Принять в обработку
                             </Button>
                           )}
-                          {order.status === "processing" && (
+                          {order.status === "PROCESSING" && (
                             <Button
-                              onClick={() => updateOrderStatus(order.id, "shipped")}
+                              onClick={() => handleShipOrder(order.id)}
                               size="sm"
                               className="bg-[#BCCEA9] hover:bg-[#a8ba95] text-[#2B4A39] text-xs md:text-sm h-8 md:h-9 px-2 md:px-3"
                             >
@@ -911,9 +1020,9 @@ const SellerAdmin = () => {
                               Отправить
                             </Button>
                           )}
-                          {order.status === "shipped" && (
+                          {order.status === "SHIPPED" && (
                             <Button
-                              onClick={() => updateOrderStatus(order.id, "delivered")}
+                              onClick={() => handleDeliverOrder(order.id)}
                               size="sm"
                               className="bg-green-600 hover:bg-green-700 text-white text-xs md:text-sm h-8 md:h-9 px-2 md:px-3"
                             >

@@ -56,4 +56,18 @@ export const inventoryService = {
     const response = await apiClient.put<StockResponse>(`/api/inventory/sku/${inventorySku}`, request);
     return response.data;
   },
+
+  async checkAvailability(offerId: number, quantity: number = 1): Promise<AvailabilityResponse> {
+    const response = await apiClient.get<AvailabilityResponse>(`/api/inventory/availability/${offerId}`, {
+      params: { quantity }
+    });
+    return response.data;
+  },
 };
+
+export interface AvailabilityResponse {
+  offerId: number;
+  available: boolean;
+  availableQuantity: number;
+  requestedQuantity: number;
+}

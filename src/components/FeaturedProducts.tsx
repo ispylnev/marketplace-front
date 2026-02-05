@@ -1,12 +1,14 @@
 import { Star, Heart, Sparkles } from 'lucide-react';
-import { useState } from 'react';
 import { ImageWithFallback } from './ImageWithFallback';
+import { useFavorites } from '../contexts/FavoritesContext';
+import { useAuth } from '../contexts/AuthContext';
 import monsteraImage from '../assets/e35a9fcdb27ad7f93f82558552e5c75b977ef47d.png';
 import palmImage from '../assets/41b7684045c606d81a7dd04211aa67cac02d3619.png';
 import succulentsImage from '../assets/5a256d30852fb7161345ae6ad8e1fd1092507893.png';
 import gardenFlowersImage from '../assets/77ccbb5ac05ba5387495b242d9f1b853d7d01607.png';
 import cactusImage from '../assets/39f8172913871a7961ff2f6e6679dec217aa264e.png';
 import { Link } from 'react-router-dom';
+import { makeFullSlug } from '../utils/slugUtils';
 
 const products = [
   {
@@ -76,19 +78,8 @@ const products = [
 ];
 
 export default function FeaturedProducts() {
-  const [favorites, setFavorites] = useState<Set<number>>(new Set());
-
-  const toggleFavorite = (id: number) => {
-    setFavorites(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(id)) {
-        newSet.delete(id);
-      } else {
-        newSet.add(id);
-      }
-      return newSet;
-    });
-  };
+  const { isAuthenticated } = useAuth();
+  const { isFavorited, toggleFavorite } = useFavorites();
 
   return (
     <section className="py-16">
@@ -109,27 +100,29 @@ export default function FeaturedProducts() {
               key={product.id}
               className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-xl transition-shadow group"
             >
-              <Link to={`/product/${product.id}`}>
+              <Link to={`/product/${makeFullSlug(product.name, product.id)}`}>
                 <div className="relative overflow-hidden bg-gray-100">
                   <ImageWithFallback
                     src={product.image}
                     alt={product.name}
                     className="w-full h-64 object-cover group-hover:scale-105 transition-transform duration-300"
                   />
-                  <button 
+                  <button
                     className="absolute top-4 right-4 bg-white p-2 rounded-full shadow-md hover:bg-gray-100 transition-colors z-10"
                     onClick={(e) => {
                       e.preventDefault();
-                      toggleFavorite(product.id);
+                      if (isAuthenticated) {
+                        toggleFavorite(product.id);
+                      }
                     }}
                   >
-                    <Heart className={`w-5 h-5 ${favorites.has(product.id) ? 'fill-red-500 text-red-500' : 'text-[#2D2E30]'}`} />
+                    <Heart className={`w-5 h-5 ${isAuthenticated && isFavorited(product.id) ? 'fill-red-500 text-red-500' : 'text-[#2D2E30]'}`} />
                   </button>
                 </div>
               </Link>
 
               <div className="p-4">
-                <Link to={`/product/${product.id}`}>
+                <Link to={`/product/${makeFullSlug(product.name, product.id)}`}>
                   <h3 className="text-[#2D2E30] mb-2 hover:text-[#2B4A39] transition-colors">{product.name}</h3>
                 </Link>
 

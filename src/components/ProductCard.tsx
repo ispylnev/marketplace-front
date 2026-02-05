@@ -3,13 +3,17 @@ import { Heart, Star, ShoppingCart, Loader2, Check, AlertCircle } from 'lucide-r
 import { Product } from '../types';
 import { useState, useEffect } from 'react';
 import { cartService } from '../api/cartService';
+import { useFavorites } from '../contexts/FavoritesContext';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ProductCardProps {
   product: Product;
 }
 
 const ProductCard = ({ product }: ProductCardProps) => {
-  const [isFavorite, setIsFavorite] = useState(false);
+  const { isAuthenticated } = useAuth();
+  const { isFavorited, toggleFavorite } = useFavorites();
+  const offerId = parseInt(product.id);
   const [isAddingToCart, setIsAddingToCart] = useState(false);
   const [isAdded, setIsAdded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +59,8 @@ const ProductCard = ({ product }: ProductCardProps) => {
         setError(available === 0 ? 'Нет в наличии' : `Доступно только ${available} шт.`);
       } else if (errorData?.code === 'OFFER_NOT_AVAILABLE') {
         setError('Товар недоступен');
+      } else if (errorData?.error) {
+        setError(errorData.error);
       } else {
         setError('Не удалось добавить');
       }
@@ -117,7 +123,7 @@ const ProductCard = ({ product }: ProductCardProps) => {
 
   return (
     <div className="group bg-white rounded-3xl shadow-sm hover:shadow-2xl transition-all duration-300 overflow-hidden border border-gray-100 hover:border-primary-200">
-      <Link to={`/product/${product.id}`}>
+      <Link to={`/product/${product.fullSlug || product.id}`}>
         <div className="relative aspect-square overflow-hidden bg-gray-50">
           <img
             src={product.image}
@@ -137,10 +143,12 @@ const ProductCard = ({ product }: ProductCardProps) => {
               className="p-2 bg-white rounded-full shadow-lg hover:bg-accent-50 transition-colors"
               onClick={(e) => {
                 e.preventDefault();
-                setIsFavorite(!isFavorite);
+                if (isAuthenticated && !isNaN(offerId)) {
+                  toggleFavorite(offerId);
+                }
               }}
             >
-              <Heart className={`w-5 h-5 ${isFavorite ? 'fill-accent-600 text-accent-600' : 'text-gray-600'}`} />
+              <Heart className={`w-5 h-5 ${isAuthenticated && !isNaN(offerId) && isFavorited(offerId) ? 'fill-accent-600 text-accent-600' : 'text-gray-600'}`} />
             </button>
           </div>
         </div>
@@ -163,7 +171,7 @@ const ProductCard = ({ product }: ProductCardProps) => {
           </div>
         </div>
 
-        <Link to={`/product/${product.id}`}>
+        <Link to={`/product/${product.fullSlug || product.id}`}>
           <h3 className="font-semibold text-gray-900 mb-3 line-clamp-2 group-hover:text-primary-600 transition-colors min-h-[3rem] text-sm leading-snug">
             {product.name}
           </h3>

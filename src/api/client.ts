@@ -22,15 +22,39 @@ class ApiClient {
       (error) => Promise.reject(error)
     );
 
-    // Интерцептор для обработки ошибок
+    // Интерцептор для обработки ошибок с автоматическим обновлением токена
     this.client.interceptors.response.use(
       (response) => response,
       async (error: AxiosError) => {
-        if (error.response?.status === 401) {
-          // Токен истек или невалиден
-          this.clearToken();
-          // Можно перенаправить на страницу входа
-          // window.location.href = '/login';
+        const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+
+        if (error.response?.status === 401 && !originalRequest._retry) {
+          originalRequest._retry = true;
+
+          const refreshToken = this.getRefreshToken();
+          if (refreshToken) {
+            try {
+              const response = await axios.post(
+                `${API_CONFIG.baseURL}/api/auth/refresh`,
+                { refreshToken }
+              );
+              const { accessToken, refreshToken: newRefreshToken } = response.data;
+
+              this.setToken(accessToken);
+              if (newRefreshToken) {
+                this.setRefreshToken(newRefreshToken);
+              }
+
+              if (originalRequest.headers) {
+                originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+              }
+              return this.client(originalRequest);
+            } catch {
+              this.clearToken();
+            }
+          } else {
+            this.clearToken();
+          }
         }
         return Promise.reject(error);
       }
@@ -73,11 +97,12 @@ class ApiClient {
   }
 
   /**
-   * Очистить токены
+   * Очистить токены и уведомить AuthContext
    */
   clearToken(): void {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    window.dispatchEvent(new Event('auth-change'));
   }
 
   /**

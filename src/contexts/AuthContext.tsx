@@ -69,14 +69,6 @@ function isTokenExpired(token: string): boolean {
   return decoded.exp * 1000 < Date.now();
 }
 
-/**
- * Получить роли из токена
- */
-function getRolesFromToken(token: string): string[] {
-  const decoded = decodeToken(token);
-  return decoded?.roles || decoded?.authorities || [];
-}
-
 interface AuthProviderProps {
   children: ReactNode;
 }
@@ -110,11 +102,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Получаем информацию о пользователе с сервера
       const response = await apiClient.get<UserInfo>('/api/auth/me');
       const user = response.data;
-
-      // Дополняем ролями из токена, если сервер не вернул
-      if (!user.roles || user.roles.length === 0) {
-        user.roles = getRolesFromToken(token);
-      }
 
       setState({
         user,
@@ -151,11 +138,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       tokenManager.setToken(accessToken);
       tokenManager.setRefreshToken(refreshToken);
-
-      // Дополняем ролями из токена
-      if (!user.roles || user.roles.length === 0) {
-        user.roles = getRolesFromToken(accessToken);
-      }
 
       setState({
         user,
@@ -278,4 +260,3 @@ export function useAuth(): AuthContextType {
   return context;
 }
 
-export default AuthContext;

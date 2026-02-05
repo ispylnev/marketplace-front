@@ -5,6 +5,54 @@ import {
   SellerResponse
 } from '../types/seller';
 
+export interface SellerOrderItemResponse {
+  id: number;
+  offerId: number;
+  productId: number;
+  productName: string;
+  productSku: string;
+  productImageUrl?: string;
+  pricePerUnit: number;
+  quantity: number;
+  totalPrice: number;
+  status: string;
+}
+
+export interface SellerOrderDeliveryAddress {
+  recipientName: string;
+  recipientPhone: string;
+  city: string;
+  street: string;
+  building: string;
+  apartment?: string;
+  postalCode?: string;
+}
+
+export interface SellerOrderResponse {
+  id: number;
+  orderNumber: string;
+  userId: number;
+  sellerId: number;
+  status: string;
+  items: SellerOrderItemResponse[];
+  itemsTotal: number;
+  deliveryPrice: number;
+  totalAmount: number;
+  currency: string;
+  deliveryMethodName?: string;
+  deliveryAddress?: SellerOrderDeliveryAddress;
+  buyerComment?: string;
+  paymentMethod?: string;
+  paymentStatus?: string;
+  createdAt: string;
+  updatedAt?: string;
+  paidAt?: string;
+  shippedAt?: string;
+  deliveredAt?: string;
+  cancelledAt?: string;
+  cancellationReason?: string;
+}
+
 /**
  * Сервис для работы с продавцами
  */
@@ -121,6 +169,50 @@ export const sellerService = {
    */
   async generateInventorySku(sellerSku: string): Promise<string> {
     const response = await apiClient.get<string>(`/api/sellers/me/sku/${sellerSku}`);
+    return response.data;
+  },
+
+  /**
+   * Получить разбивку резервов по офферам и статусам заказов.
+   * @returns Map: offerId -> (orderStatus -> quantity)
+   */
+  async getReservedBreakdown(): Promise<Record<string, Record<string, number>>> {
+    const response = await apiClient.get<Record<string, Record<string, number>>>('/api/seller/admin/orders/reserved-breakdown');
+    return response.data;
+  },
+
+  // ==================== Seller Admin: Заказы ====================
+
+  /**
+   * Получить заказы продавца
+   */
+  async getSellerOrders(status?: string): Promise<SellerOrderResponse[]> {
+    const params = status ? { status } : {};
+    const response = await apiClient.get<SellerOrderResponse[]>('/api/seller/admin/orders', { params });
+    return response.data;
+  },
+
+  /**
+   * Принять заказ в обработку (PAID → PROCESSING)
+   */
+  async acceptOrder(orderId: number): Promise<SellerOrderResponse> {
+    const response = await apiClient.post<SellerOrderResponse>(`/api/seller/admin/orders/${orderId}/accept`);
+    return response.data;
+  },
+
+  /**
+   * Отметить заказ как отправленный (PROCESSING → SHIPPED)
+   */
+  async shipOrder(orderId: number): Promise<SellerOrderResponse> {
+    const response = await apiClient.post<SellerOrderResponse>(`/api/seller/admin/orders/${orderId}/ship`);
+    return response.data;
+  },
+
+  /**
+   * Отметить заказ как доставленный (SHIPPED → DELIVERED)
+   */
+  async deliverOrder(orderId: number): Promise<SellerOrderResponse> {
+    const response = await apiClient.post<SellerOrderResponse>(`/api/seller/admin/orders/${orderId}/deliver`);
     return response.data;
   },
 

@@ -2,6 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ShoppingCart, User, Menu, X, LogIn, UserPlus, LogOut, Heart, Package } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useFavorites } from '../contexts/FavoritesContext';
 import { cartService } from '../api/cartService';
 import SearchBar from './SearchBar';
 import heroBg from '../assets/8e51749862af8a39de8862be61345a3928582e1e.png';
@@ -14,6 +15,7 @@ const Header = () => {
   const userMenuRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { isAuthenticated, logout } = useAuth();
+  const { favoritesCount } = useFavorites();
 
   // Загрузка количества товаров в корзине
   useEffect(() => {
@@ -80,12 +82,17 @@ const Header = () => {
 
           {/* Right Side Icons */}
           <div className="flex items-center gap-6">
-            <button className="hover:text-[#BCCEA9] transition-colors text-white hidden md:block">
+            <Link to={isAuthenticated ? "/favorites" : "/login"} className="hover:text-[#BCCEA9] transition-colors text-white hidden md:block relative">
               <Heart className="w-6 h-6" />
-            </button>
-            <button className="hover:text-[#BCCEA9] transition-colors text-white hidden md:block">
+              {favoritesCount > 0 && (
+                <span className="absolute -top-2 -right-2 bg-[#BCCEA9] text-[#2D2E30] text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {favoritesCount > 99 ? '99+' : favoritesCount}
+                </span>
+              )}
+            </Link>
+            <Link to={isAuthenticated ? "/orders" : "/login"} className="hover:text-[#BCCEA9] transition-colors text-white hidden md:block">
               <Package className="w-6 h-6" />
-            </button>
+            </Link>
             <Link to="/cart" className="hover:text-[#BCCEA9] transition-colors relative text-white">
               <ShoppingCart className="w-6 h-6" />
               {cartCount > 0 && (
@@ -174,8 +181,8 @@ const Header = () => {
           <Link to="/catalog?category=accessories" className="text-white hover:text-[#BCCEA9] transition-colors">
             Сопутствующие товары
           </Link>
-          <Link to="/catalog?promo=true" className="text-[#BCCEA9] hover:text-white transition-colors">
-            Акции
+          <Link to="/catalog" className="text-[#BCCEA9] hover:text-white transition-colors">
+            Весь каталог
           </Link>
         </nav>
 

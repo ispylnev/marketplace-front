@@ -31,19 +31,26 @@ export default function AdminPanel() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [offersData, sellersData, categoriesData, brandsData, editRequestsData] = await Promise.all([
-        adminService.getPendingOffers().catch(() => []),
-        adminService.getPendingSellers().catch(() => []),
-        adminService.getCategories().catch(() => []),
-        adminService.getAllBrands().catch(() => []),
-        moderationService.getPendingRequests().catch(() => []),
+      const results = await Promise.allSettled([
+        adminService.getPendingOffers(),
+        adminService.getPendingSellers(),
+        adminService.getCategories(),
+        adminService.getAllBrands(),
+        moderationService.getPendingRequests(),
       ]);
 
-      setOffers(offersData);
-      setSellers(sellersData);
-      setCategories(categoriesData);
-      setBrands(brandsData);
-      setEditRequests(editRequestsData);
+      const [offersResult, sellersResult, categoriesResult, brandsResult, editRequestsResult] = results;
+
+      setOffers(offersResult.status === 'fulfilled' ? offersResult.value : []);
+      setSellers(sellersResult.status === 'fulfilled' ? sellersResult.value : []);
+      setCategories(categoriesResult.status === 'fulfilled' ? categoriesResult.value : []);
+      setBrands(brandsResult.status === 'fulfilled' ? brandsResult.value : []);
+      setEditRequests(editRequestsResult.status === 'fulfilled' ? editRequestsResult.value : []);
+
+      const failed = results.filter(r => r.status === 'rejected');
+      if (failed.length > 0) {
+        showError(`Не удалось загрузить ${failed.length} из ${results.length} разделов`);
+      }
     } catch {
       showError('Ошибка загрузки данных');
     } finally {
