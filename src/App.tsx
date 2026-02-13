@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { FavoritesProvider } from './contexts/FavoritesContext';
+import { NotificationsProvider } from './contexts/NotificationsContext';
 import { ProtectedRoute, GuestRoute } from './components/ProtectedRoute';
 import Header from './components/Header';
 import Footer from './components/Footer';
@@ -23,6 +24,9 @@ import EditOffer from './pages/EditOffer';
 import Cart from './pages/Cart';
 import Checkout from './pages/Checkout';
 import MyOrders from './pages/MyOrders';
+import Notifications from './pages/Notifications';
+import MyReviews from './pages/MyReviews';
+import Settings from './pages/Settings';
 
 // Layout with Header/Footer
 function Layout({ children }: { children: React.ReactNode }) {
@@ -42,6 +46,7 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <FavoritesProvider>
+        <NotificationsProvider>
         <ToastProvider>
           <Routes>
             {/* Guest routes (redirect if authenticated) */}
@@ -84,6 +89,16 @@ function App() {
                 <MyOrders />
               </ProtectedRoute>
             } />
+            <Route path="/notifications" element={
+              <ProtectedRoute authOnly>
+                <Layout><Notifications /></Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/my-reviews" element={
+              <ProtectedRoute authOnly>
+                <MyReviews />
+              </ProtectedRoute>
+            } />
             <Route path="/profile" element={
               <ProtectedRoute authOnly>
                 <Layout><Profile /></Layout>
@@ -92,6 +107,11 @@ function App() {
             <Route path="/profile/buyer" element={
               <ProtectedRoute authOnly>
                 <BuyerProfile />
+              </ProtectedRoute>
+            } />
+            <Route path="/settings" element={
+              <ProtectedRoute authOnly>
+                <Settings />
               </ProtectedRoute>
             } />
             <Route path="/register-store" element={
@@ -130,6 +150,7 @@ function App() {
             } />
           </Routes>
         </ToastProvider>
+        </NotificationsProvider>
         </FavoritesProvider>
       </AuthProvider>
     </BrowserRouter>

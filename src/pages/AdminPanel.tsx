@@ -1,16 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShoppingBag, Users, FolderTree, BookOpen, LogOut, Loader2, Lock, FileEdit } from 'lucide-react';
+import { ShoppingBag, Users, FolderTree, BookOpen, LogOut, Loader2, Lock, FileEdit, MessageSquare } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Separator } from '../components/ui/separator';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { adminService, OfferForModeration, CategoryResponse, BrandResponse } from '../api/adminService';
 import { moderationService, EditRequestResponse } from '../api/moderationService';
+import { reviewService } from '../api/reviewService';
 import { SellerResponse, SellerStatus } from '../types/seller';
-import { OfferModerationTab, SellerModerationTab, CategoriesTab, BrandsTab } from '../components/admin';
+import { ReviewDto } from '../types/review';
+import { OfferModerationTab, SellerModerationTab, ReviewModerationTab, CategoriesTab, BrandsTab } from '../components/admin';
 
-type Section = 'offers' | 'sellers' | 'categories' | 'brands' | 'editChanges';
+type Section = 'offers' | 'sellers' | 'reviews' | 'categories' | 'brands' | 'editChanges';
 
 export default function AdminPanel() {
   const navigate = useNavigate();
@@ -26,6 +28,7 @@ export default function AdminPanel() {
   const [categories, setCategories] = useState<CategoryResponse[]>([]);
   const [brands, setBrands] = useState<BrandResponse[]>([]);
   const [editRequests, setEditRequests] = useState<EditRequestResponse[]>([]);
+  const [reviews, setReviews] = useState<ReviewDto[]>([]);
 
   // Load data
   const loadData = useCallback(async () => {
@@ -37,15 +40,17 @@ export default function AdminPanel() {
         adminService.getCategories(),
         adminService.getAllBrands(),
         moderationService.getPendingRequests(),
+        reviewService.getPendingReviews(),
       ]);
 
-      const [offersResult, sellersResult, categoriesResult, brandsResult, editRequestsResult] = results;
+      const [offersResult, sellersResult, categoriesResult, brandsResult, editRequestsResult, reviewsResult] = results;
 
       setOffers(offersResult.status === 'fulfilled' ? offersResult.value : []);
       setSellers(sellersResult.status === 'fulfilled' ? sellersResult.value : []);
       setCategories(categoriesResult.status === 'fulfilled' ? categoriesResult.value : []);
       setBrands(brandsResult.status === 'fulfilled' ? brandsResult.value : []);
       setEditRequests(editRequestsResult.status === 'fulfilled' ? editRequestsResult.value : []);
+      setReviews(reviewsResult.status === 'fulfilled' ? reviewsResult.value : []);
 
       const failed = results.filter(r => r.status === 'rejected');
       if (failed.length > 0) {
@@ -200,9 +205,33 @@ export default function AdminPanel() {
     }
   };
 
+  // Review handlers
+  const handleApproveReview = async (id: number) => {
+    try {
+      await reviewService.approveReview(id);
+      setReviews(prev => prev.filter(r => r.id !== id));
+      showSuccess('Отзыв одобрен');
+    } catch (e: any) {
+      showError(e?.response?.data?.message || 'Ошибка одобрения отзыва');
+      throw e;
+    }
+  };
+
+  const handleRejectReview = async (id: number, reason: string) => {
+    try {
+      await reviewService.rejectReview(id, reason);
+      setReviews(prev => prev.filter(r => r.id !== id));
+      showSuccess('Отзыв отклонён');
+    } catch (e: any) {
+      showError(e?.response?.data?.message || 'Ошибка отклонения отзыва');
+      throw e;
+    }
+  };
+
   // Stats
   const pendingOffersCount = offers.filter(o => o.status === 'PENDING_REVIEW').length;
   const pendingSellersCount = sellers.filter(s => s.status === SellerStatus.PENDING).length;
+  const pendingReviewsCount = reviews.filter(r => r.status === 'PENDING_MODERATION').length;
   const pendingEditRequestsCount = editRequests.length;
 
   // Loading state
@@ -321,6 +350,13 @@ export default function AdminPanel() {
                   badge={pendingSellersCount}
                 />
                 <NavButton
+                  active={currentSection === 'reviews'}
+                  onClick={() => setCurrentSection('reviews')}
+                  icon={<MessageSquare className="w-5 h-5" />}
+                  label="Модерация отзывов"
+                  badge={pendingReviewsCount}
+                />
+                <NavButton
                   active={currentSection === 'categories'}
                   onClick={() => setCurrentSection('categories')}
                   icon={<FolderTree className="w-5 h-5" />}
@@ -360,6 +396,7 @@ export default function AdminPanel() {
             onSectionChange={setCurrentSection}
             pendingOffersCount={pendingOffersCount}
             pendingSellersCount={pendingSellersCount}
+            pendingReviewsCount={pendingReviewsCount}
             pendingEditRequestsCount={pendingEditRequestsCount}
             onLogout={handleLogout}
           />
@@ -386,6 +423,13 @@ export default function AdminPanel() {
                     onApprove={handleApproveSeller}
                     onReject={handleRejectSeller}
                     onBlock={handleBlockSeller}
+                  />
+                )}
+                {currentSection === 'reviews' && (
+                  <ReviewModerationTab
+                    reviews={reviews}
+                    onApprove={handleApproveReview}
+                    onReject={handleRejectReview}
                   />
                 )}
                 {currentSection === 'categories' && (
@@ -458,6 +502,7 @@ function MobileNav({
   onSectionChange,
   pendingOffersCount,
   pendingSellersCount,
+  pendingReviewsCount,
   pendingEditRequestsCount,
   onLogout,
 }: {
@@ -465,6 +510,7 @@ function MobileNav({
   onSectionChange: (section: Section) => void;
   pendingOffersCount: number;
   pendingSellersCount: number;
+  pendingReviewsCount: number;
   pendingEditRequestsCount: number;
   onLogout: () => void;
 }) {
@@ -496,6 +542,13 @@ function MobileNav({
           icon={<Users className="w-5 h-5" />}
           label="Продавцы"
           badge={pendingSellersCount}
+        />
+        <MobileNavButton
+          active={currentSection === 'reviews'}
+          onClick={() => onSectionChange('reviews')}
+          icon={<MessageSquare className="w-5 h-5" />}
+          label="Отзывы"
+          badge={pendingReviewsCount}
         />
         <MobileNavButton
           active={currentSection === 'editChanges'}

@@ -1,7 +1,7 @@
-import { useParams, useNavigate } from 'react-router-dom';
-import { Heart, ShoppingCart, Truck, Shield, Loader2, X, ChevronLeft, ChevronRight, ZoomIn, Sun, Droplets, Wind, Thermometer, Leaf, AlertTriangle, Package, Check, Store, Star, ChevronRight as ChevronRightSmall, Minus, Plus, AlertCircle } from 'lucide-react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { Heart, ShoppingCart, Truck, Shield, Loader2, X, ChevronLeft, ChevronRight, ZoomIn, Sun, Droplets, Wind, Thermometer, Leaf, AlertTriangle, Package, Check, Store, Star, ChevronRight as ChevronRightSmall, Minus, Plus, AlertCircle, MessageSquare } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { extractId } from '../utils/slugUtils';
 import { offerService } from '../api/offerService';
 import { sellerService } from '../api/sellerService';
@@ -11,6 +11,7 @@ import { useFavorites } from '../contexts/FavoritesContext';
 import { useAuth } from '../contexts/AuthContext';
 import { OfferResponse, OfferImageResponse } from '../types/offer';
 import { SellerResponse } from '../types/seller';
+import ReviewList from '../components/reviews/ReviewList';
 
 function pluralize(n: number, one: string, few: string, many: string): string {
   const abs = Math.abs(n);
@@ -25,12 +26,14 @@ function pluralize(n: number, one: string, few: string, many: string): string {
 const ProductDetail = () => {
   const { slugWithId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const id = extractId(slugWithId);
   const { isAuthenticated } = useAuth();
   const { isFavorited, toggleFavorite } = useFavorites();
   const [selectedImage, setSelectedImage] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'description' | 'care' | 'specs'>('care');
+  const reviewsRef = useRef<HTMLDivElement>(null);
 
   // Состояние для данных оффера
   const [offer, setOffer] = useState<OfferResponse | null>(null);
@@ -48,6 +51,15 @@ const ProductDetail = () => {
   const [isAddingToCart, setIsAddingToCart] = useState(false);
   const [isAdded, setIsAdded] = useState(false);
   const [cartError, setCartError] = useState<string | null>(null);
+
+  // Auto-scroll к отзывам при #reviews в URL
+  useEffect(() => {
+    if (!loading && location.hash === '#reviews' && reviewsRef.current) {
+      setTimeout(() => {
+        reviewsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 300);
+    }
+  }, [loading, location.hash]);
 
   // Сбрасываем состояние "добавлено" через 2 секунды
   useEffect(() => {
@@ -715,6 +727,15 @@ const ProductDetail = () => {
               )}
             </div>
           </div>
+        </div>
+
+        {/* Reviews Section */}
+        <div id="reviews" ref={reviewsRef} className="mt-8 bg-white rounded-2xl p-6">
+          <div className="flex items-center gap-2 mb-5">
+            <MessageSquare className="w-5 h-5 text-gray-600" />
+            <h2 className="text-lg font-bold text-gray-900">Отзывы</h2>
+          </div>
+          <ReviewList offerId={id!} />
         </div>
       </div>
 

@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Package, ChevronDown, ChevronUp, ArrowLeft, AlertCircle, X, ShoppingBag } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { Package, ChevronDown, ChevronUp, ArrowLeft, AlertCircle, X, ShoppingBag, Star } from 'lucide-react';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { Button } from '../components/ui/button';
 import { Separator } from '../components/ui/separator';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { orderService, OrderSummaryResponse, OrderDetailResponse } from '../api/orderService';
+import { makeFullSlug } from '../utils/slugUtils';
 
 const statusLabels: Record<string, string> = {
   PENDING: 'Ожидает оплаты',
@@ -177,18 +178,18 @@ const MyOrders = () => {
               const canCancel = ['PAID', 'PENDING'].includes(order.status);
 
               return (
-                <div key={order.id} className="bg-white rounded-xl shadow-sm overflow-hidden">
+                <div key={order.id} className={`bg-white rounded-xl shadow-sm overflow-hidden border-l-[3px] transition-colors ${isExpanded ? 'border-l-[#2B4A39]' : 'border-l-transparent hover:border-l-[#BCCEA9]'}`}>
                   {/* Summary row */}
                   <button
                     onClick={() => toggleExpand(order.id)}
-                    className="w-full flex items-center gap-3 p-4 hover:bg-gray-50 transition-colors text-left"
+                    className="w-full flex items-center gap-3 p-4 hover:bg-[#BCCEA9]/10 transition-colors text-left cursor-pointer group"
                   >
                     <div className="w-10 h-10 rounded-lg bg-[#BCCEA9]/20 flex items-center justify-center flex-shrink-0">
                       <Package className="w-5 h-5 text-[#2B4A39]" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
-                        <span className="text-[#2D2E30] font-medium text-sm truncate">{order.orderNumber}</span>
+                        <span className="text-[#2D2E30] font-medium text-sm truncate group-hover:text-[#2B4A39] transition-colors">{order.orderNumber}</span>
                         <span className={`rounded-full text-xs px-2 py-0.5 font-medium flex-shrink-0 ${statusColors[order.status] || 'bg-gray-100 text-gray-700'}`}>
                           {statusLabels[order.status] || order.status}
                         </span>
@@ -201,7 +202,15 @@ const MyOrders = () => {
                         <span>{formatDate(order.createdAt)}</span>
                       </div>
                     </div>
-                    {isExpanded ? <ChevronUp className="w-4 h-4 text-[#2D2E30]/40 flex-shrink-0" /> : <ChevronDown className="w-4 h-4 text-[#2D2E30]/40 flex-shrink-0" />}
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <span className="text-xs text-[#2D2E30]/30 group-hover:text-[#2B4A39]/60 transition-colors hidden sm:inline">
+                        {isExpanded ? 'Свернуть' : 'Подробнее'}
+                      </span>
+                      {isExpanded
+                        ? <ChevronUp className="w-4 h-4 text-[#2B4A39] flex-shrink-0" />
+                        : <ChevronDown className="w-4 h-4 text-[#2D2E30]/30 group-hover:text-[#2B4A39] transition-colors flex-shrink-0" />
+                      }
+                    </div>
                   </button>
 
                   {/* Expanded details */}
@@ -217,18 +226,34 @@ const MyOrders = () => {
                           <div className="flex flex-col gap-2 mb-3">
                             {detail.items.map(item => (
                               <div key={item.id} className="flex items-center gap-3">
-                                {item.productImageUrl ? (
-                                  <img src={item.productImageUrl} alt={item.productName} className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
-                                ) : (
-                                  <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-                                    <ShoppingBag className="w-5 h-5 text-gray-300" />
+                                <Link
+                                  to={`/product/${makeFullSlug(item.productName, item.offerId)}`}
+                                  className="flex items-center gap-3 flex-1 min-w-0 -m-2 p-2 rounded-lg hover:bg-[#BCCEA9]/10 transition-colors group/item"
+                                >
+                                  {item.productImageUrl ? (
+                                    <img src={item.productImageUrl} alt={item.productName} className="w-12 h-12 rounded-lg object-cover flex-shrink-0 group-hover/item:ring-2 group-hover/item:ring-[#BCCEA9] transition-all" />
+                                  ) : (
+                                    <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                                      <ShoppingBag className="w-5 h-5 text-gray-300" />
+                                    </div>
+                                  )}
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm text-[#2D2E30] truncate group-hover/item:text-[#2B4A39] transition-colors">
+                                      {item.productName}
+                                    </p>
+                                    <p className="text-xs text-[#2D2E30]/50">{item.quantity} × {item.pricePerUnit} ₽</p>
                                   </div>
+                                  <span className="text-sm font-medium text-[#2B4A39] flex-shrink-0">{item.totalPrice} ₽</span>
+                                </Link>
+                                {(order.status === 'COMPLETED' || order.status === 'DELIVERED') && (
+                                  <Link
+                                    to={`/product/${makeFullSlug(item.productName, item.offerId)}#reviews`}
+                                    className="flex items-center gap-1 text-xs text-[#2B4A39] hover:text-[#1d3528] bg-[#BCCEA9]/30 hover:bg-[#BCCEA9]/50 px-2.5 py-1.5 rounded-lg transition-colors flex-shrink-0"
+                                  >
+                                    <Star className="w-3.5 h-3.5" />
+                                    Отзыв
+                                  </Link>
                                 )}
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm text-[#2D2E30] truncate">{item.productName}</p>
-                                  <p className="text-xs text-[#2D2E30]/50">{item.quantity} × {item.pricePerUnit} ₽</p>
-                                </div>
-                                <span className="text-sm font-medium text-[#2B4A39] flex-shrink-0">{item.totalPrice} ₽</span>
                               </div>
                             ))}
                           </div>

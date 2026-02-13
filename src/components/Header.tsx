@@ -1,8 +1,9 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingCart, User, Menu, X, LogIn, UserPlus, LogOut, Heart, Package } from 'lucide-react';
+import { ShoppingCart, User, Menu, X, LogIn, UserPlus, LogOut, Heart, Package, Bell } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useFavorites } from '../contexts/FavoritesContext';
+import { useNotifications } from '../contexts/NotificationsContext';
 import { cartService } from '../api/cartService';
 import SearchBar from './SearchBar';
 import heroBg from '../assets/8e51749862af8a39de8862be61345a3928582e1e.png';
@@ -16,6 +17,7 @@ const Header = () => {
   const navigate = useNavigate();
   const { isAuthenticated, logout } = useAuth();
   const { favoritesCount } = useFavorites();
+  const { unreadCount } = useNotifications();
 
   // Загрузка количества товаров в корзине
   useEffect(() => {
@@ -93,6 +95,16 @@ const Header = () => {
             <Link to={isAuthenticated ? "/orders" : "/login"} className="hover:text-[#BCCEA9] transition-colors text-white hidden md:block">
               <Package className="w-6 h-6" />
             </Link>
+            {isAuthenticated && (
+              <Link to="/notifications" className="hover:text-[#BCCEA9] transition-colors text-white hidden md:block relative">
+                <Bell className="w-6 h-6" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-2 -right-2 bg-[#BCCEA9] text-[#2D2E30] text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </Link>
+            )}
             <Link to="/cart" className="hover:text-[#BCCEA9] transition-colors relative text-white">
               <ShoppingCart className="w-6 h-6" />
               {cartCount > 0 && (

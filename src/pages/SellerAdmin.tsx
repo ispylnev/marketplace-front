@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import {
   ShoppingBag, Package, TrendingUp, Store, Check, X, Eye, Edit,
   Trash2, Plus, Search, LogOut, DollarSign, Users, AlertCircle,
-  Clock, ExternalLink, Camera, Upload
+  Clock, ExternalLink, Camera, Upload, MessageSquare, Loader2, Send
 } from "lucide-react";
 import Header from "../components/Header";
 import { Separator } from "../components/ui/separator";
@@ -18,6 +18,9 @@ import { inventoryService, StockResponse } from '../api/inventoryService';
 import { moderationService, EditRequestResponse } from '../api/moderationService';
 import { OfferResponse, OfferStatus as OfferStatusType } from '../types/offer';
 import { SellerResponse, SellerStatus, SellerStatusLabels } from '../types/seller';
+import { reviewService } from '../api/reviewService';
+import { ReviewDto } from '../types/review';
+import StarRating from '../components/reviews/StarRating';
 
 // Типы данных
 interface Offer {
@@ -122,11 +125,17 @@ interface ShopSettings {
 
 const SellerAdmin = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [sellerProfile, setSellerProfile] = useState<SellerResponse | null>(null);
   const [sellerError, setSellerError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [currentSection, setCurrentSection] = useState<"shop" | "offers" | "orders" | "stats">("shop");
+  const [currentSection, setCurrentSection] = useState<"shop" | "offers" | "orders" | "reviews" | "stats">(
+    (searchParams.get('section') as "shop" | "offers" | "orders" | "reviews" | "stats") ||
+    (location.state as any)?.section ||
+    "shop"
+  );
   const [offers, setOffers] = useState<Offer[]>([]);
   const [orders, setOrders] = useState<SellerOrderResponse[]>([]);
   const [stats, setStats] = useState<Stats>({
@@ -159,8 +168,27 @@ const SellerAdmin = () => {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
+  // Review state
+  const [sellerReviews, setSellerReviews] = useState<ReviewDto[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewsPage, setReviewsPage] = useState(0);
+  const [reviewsHasMore, setReviewsHasMore] = useState(true);
+  const [replyingToReview, setReplyingToReview] = useState<number | null>(null);
+  const [replyText, setReplyText] = useState('');
+  const [replySubmitting, setReplySubmitting] = useState(false);
+  const [replyError, setReplyError] = useState<string | null>(null);
+
   useEffect(() => {
     loadData();
+
+    // Показать сообщение из навигации (напр. после создания оффера)
+    const navMessage = (location.state as any)?.message;
+    if (navMessage) {
+      setActionMessage({ type: 'success', text: navMessage });
+      setTimeout(() => setActionMessage(null), 6000);
+      // Очищаем state, чтобы при обновлении страницы сообщение не появлялось повторно
+      window.history.replaceState({}, '');
+    }
   }, []);
 
   const loadData = async () => {
@@ -409,6 +437,59 @@ const SellerAdmin = () => {
     }
   };
 
+  // Load seller reviews
+  const loadSellerReviews = async (page = 0, append = false) => {
+    setReviewsLoading(true);
+    try {
+      const data = await reviewService.getSellerReviews(page, 20);
+      if (append) {
+        setSellerReviews(prev => [...prev, ...data]);
+      } else {
+        setSellerReviews(data);
+      }
+      setReviewsHasMore(data.length === 20);
+      setReviewsPage(page);
+    } catch {
+      if (!append) setSellerReviews([]);
+    } finally {
+      setReviewsLoading(false);
+    }
+  };
+
+  // Load reviews when section changes
+  useEffect(() => {
+    if (currentSection === 'reviews' && sellerReviews.length === 0 && !reviewsLoading) {
+      loadSellerReviews(0);
+    }
+  }, [currentSection]);
+
+  const handleSubmitReply = async (reviewId: number) => {
+    if (replyText.trim().length < 10) {
+      setReplyError('Минимальная длина ответа — 10 символов');
+      return;
+    }
+    if (replyText.trim().length > 3000) {
+      setReplyError('Максимальная длина ответа — 3000 символов');
+      return;
+    }
+
+    setReplySubmitting(true);
+    setReplyError(null);
+    try {
+      await reviewService.submitSellerResponse(reviewId, { comment: replyText.trim() });
+      setReplyingToReview(null);
+      setReplyText('');
+      showAction('success', 'Ответ отправлен на модерацию');
+      // Refresh reviews
+      loadSellerReviews(0);
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || err?.response?.data?.message || 'Ошибка отправки ответа';
+      setReplyError(msg);
+    } finally {
+      setReplySubmitting(false);
+    }
+  };
+
   const filteredOffers = offers.filter(o => {
     if (filterStatus !== "all" && o.status !== filterStatus) return false;
     if (searchQuery && !o.productName.toLowerCase().includes(searchQuery.toLowerCase())) return false;
@@ -578,6 +659,22 @@ const SellerAdmin = () => {
                       {newOrdersCount}
                     </span>
                   )}
+                </button>
+
+                <button
+                  onClick={() => {
+                    setCurrentSection("reviews");
+                    setSearchQuery("");
+                    setFilterStatus("all");
+                  }}
+                  className={`flex flex-col lg:flex-row items-center lg:items-center justify-center lg:justify-start transition-colors px-3 py-3 md:px-4 md:py-3 rounded-lg text-sm md:text-base ${
+                    currentSection === "reviews"
+                      ? "bg-[#BCCEA9] text-[#2B4A39]"
+                      : "hover:bg-[#F8F9FA] text-[#2D2E30]"
+                  }`}
+                >
+                  <MessageSquare className="w-6 h-6 lg:w-5 lg:h-5 flex-shrink-0 mb-1 lg:mb-0 lg:mr-3" />
+                  <span className="text-center lg:text-left lg:flex-1 text-xs lg:text-base">Отзывы</span>
                 </button>
 
                 <button
@@ -1041,6 +1138,192 @@ const SellerAdmin = () => {
                       <p className="text-[#2D2E30]/70 text-sm md:text-base">
                         Заказы не найдены
                       </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ОТЗЫВЫ */}
+            {currentSection === "reviews" && (
+              <div>
+                <div className="bg-white shadow-md rounded-xl p-4 md:p-6">
+                  <h2 className="text-[#2B4A39] font-semibold text-xl md:text-2xl mb-4 md:mb-6">
+                    Отзывы покупателей
+                  </h2>
+
+                  {reviewsLoading && sellerReviews.length === 0 ? (
+                    <div className="flex justify-center py-12">
+                      <Loader2 className="w-8 h-8 text-[#2B4A39] animate-spin" />
+                    </div>
+                  ) : sellerReviews.length === 0 ? (
+                    <div className="text-center py-12">
+                      <MessageSquare className="text-[#2D2E30]/20 mx-auto w-14 h-14 mb-3" />
+                      <p className="text-[#2D2E30]/60 text-sm md:text-base">
+                        Пока нет отзывов на ваши товары
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-4">
+                      {sellerReviews.map((review) => (
+                        <div
+                          key={review.id}
+                          className="border border-[#2D2E30]/10 rounded-lg md:rounded-xl p-4 md:p-5"
+                        >
+                          {/* Review header */}
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-[#2D2E30]">
+                                {review.buyerDisplayName || 'Покупатель'}
+                              </span>
+                              <span className="text-xs text-[#2D2E30]/40">
+                                {new Date(review.createdAt).toLocaleDateString('ru-RU', {
+                                  day: 'numeric',
+                                  month: 'long',
+                                  year: 'numeric',
+                                })}
+                              </span>
+                            </div>
+                            <StarRating rating={review.rating} size="sm" />
+                          </div>
+
+                          {/* Comment */}
+                          <p className="text-sm text-[#2D2E30]/80 leading-relaxed mb-3">
+                            {review.comment}
+                          </p>
+
+                          {/* Images */}
+                          {review.images && review.images.length > 0 && (
+                            <div className="flex gap-2 mb-3 flex-wrap">
+                              {review.images.map((img) => (
+                                <div
+                                  key={img.id}
+                                  className="w-14 h-14 rounded-lg overflow-hidden border border-[#2D2E30]/10"
+                                >
+                                  <img
+                                    src={img.url}
+                                    alt=""
+                                    className="w-full h-full object-cover"
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Existing seller response */}
+                          {review.sellerResponse && (
+                            <div className="ml-4 bg-[#F8F9FA] rounded-lg p-3 border-l-2 border-[#BCCEA9] mb-3">
+                              <div className="flex items-center gap-2 mb-1">
+                                <Store className="w-3.5 h-3.5 text-[#2B4A39]" />
+                                <span className="text-xs font-medium text-[#2B4A39]">
+                                  Ваш ответ
+                                </span>
+                                <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                  review.sellerResponse.status === 'APPROVED'
+                                    ? 'bg-green-100 text-green-700'
+                                    : review.sellerResponse.status === 'REJECTED'
+                                    ? 'bg-red-100 text-red-700'
+                                    : 'bg-yellow-100 text-yellow-700'
+                                }`}>
+                                  {review.sellerResponse.status === 'APPROVED'
+                                    ? 'Опубликован'
+                                    : review.sellerResponse.status === 'REJECTED'
+                                    ? 'Отклонён'
+                                    : 'На модерации'}
+                                </span>
+                              </div>
+                              <p className="text-sm text-[#2D2E30]/70">
+                                {review.sellerResponse.comment}
+                              </p>
+                              {review.sellerResponse.status === 'REJECTED' && review.sellerResponse.rejectionReason && (
+                                <p className="text-xs text-red-600 mt-1">
+                                  Причина: {review.sellerResponse.rejectionReason}
+                                </p>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Reply button / form */}
+                          {!review.sellerResponse && replyingToReview !== review.id && (
+                            <button
+                              onClick={() => {
+                                setReplyingToReview(review.id);
+                                setReplyText('');
+                                setReplyError(null);
+                              }}
+                              className="flex items-center gap-1.5 text-xs text-[#2B4A39] hover:text-[#1d3527] transition-colors"
+                            >
+                              <MessageSquare className="w-3.5 h-3.5" />
+                              Ответить на отзыв
+                            </button>
+                          )}
+
+                          {/* Reply form */}
+                          {replyingToReview === review.id && (
+                            <div className="mt-3 ml-4 border border-[#BCCEA9] rounded-lg p-3">
+                              <textarea
+                                value={replyText}
+                                onChange={(e) => setReplyText(e.target.value)}
+                                placeholder="Ваш ответ на отзыв (минимум 10 символов)..."
+                                rows={3}
+                                className="w-full border border-[#2D2E30]/20 focus:outline-none focus:border-[#BCCEA9] px-3 py-2 text-sm rounded-lg resize-none mb-2"
+                              />
+                              {replyError && (
+                                <p className="text-xs text-red-600 mb-2">{replyError}</p>
+                              )}
+                              <div className="flex gap-2">
+                                <Button
+                                  onClick={() => handleSubmitReply(review.id)}
+                                  disabled={replySubmitting}
+                                  size="sm"
+                                  className="bg-[#2B4A39] hover:bg-[#234135] text-white text-xs h-8 px-3"
+                                >
+                                  {replySubmitting ? (
+                                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                  ) : (
+                                    <Send className="w-3 h-3 mr-1" />
+                                  )}
+                                  {replySubmitting ? 'Отправка...' : 'Отправить'}
+                                </Button>
+                                <Button
+                                  onClick={() => {
+                                    setReplyingToReview(null);
+                                    setReplyText('');
+                                    setReplyError(null);
+                                  }}
+                                  disabled={replySubmitting}
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-[#2D2E30]/70 text-xs h-8 px-3"
+                                >
+                                  Отмена
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+
+                      {/* Load more */}
+                      {reviewsHasMore && (
+                        <div className="text-center mt-2">
+                          <Button
+                            onClick={() => loadSellerReviews(reviewsPage + 1, true)}
+                            disabled={reviewsLoading}
+                            variant="ghost"
+                            className="text-[#2B4A39] text-sm"
+                          >
+                            {reviewsLoading ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Загрузка...
+                              </>
+                            ) : (
+                              'Показать ещё'
+                            )}
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

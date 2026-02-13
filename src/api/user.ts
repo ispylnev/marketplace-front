@@ -73,6 +73,13 @@ export const userApi = {
   async deleteAvatar(): Promise<void> {
     await apiClient.delete('/api/users/me/avatar');
   },
+
+  /**
+   * Сменить пароль текущего пользователя
+   */
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    await apiClient.put('/api/users/me/password', { currentPassword, newPassword });
+  },
 };
 
 export default userApi;

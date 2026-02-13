@@ -18,6 +18,7 @@ import { userApi, UserProfileResponse } from '../api/user';
 import { sellerService } from '../api/sellerService';
 import { SellerResponse, SellerStatus } from '../types/seller';
 import { UserAvatar, generateInitials } from '../components/UserAvatar';
+import { useAuth } from '../contexts/AuthContext';
 import avatarBackground from '../assets/4068108bae8ada353e34675c0c754fb530d30e98.png';
 
 interface UserInfo {
@@ -47,6 +48,7 @@ const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
 const BuyerProfile = () => {
   const navigate = useNavigate();
+  const { isSeller, refreshAuth } = useAuth();
   const [user, setUser] = useState<UserInfo | null>(null);
   const [profile, setProfile] = useState<UserProfileResponse | null>(null);
   const [_sellerId, setSellerId] = useState<number | null>(null);
@@ -99,6 +101,10 @@ const BuyerProfile = () => {
         const sellerData = await sellerService.getMySellerProfile();
         setSellerProfile(sellerData);
         setSellerId(sellerData.id);
+        // Если продавец одобрен, но роль SELLER ещё не в кеше — обновляем
+        if (sellerData.status === SellerStatus.APPROVED && !isSeller) {
+          await refreshAuth();
+        }
       } catch (error: any) {
         // 404 = пользователь еще не подавал заявку на продавца
         if (error.response?.status !== 404) {
@@ -267,9 +273,8 @@ const BuyerProfile = () => {
 
   const userProfile = {
     name: displayName,
-    rating: 4.8,
-    reviewsCount: 24,
-    status: "Коллекционирую редкие растения 🌸"
+    rating: sellerProfile?.rating || 0,
+    reviewsCount: sellerProfile?.reviewCount || 0
   };
 
   return (
@@ -325,44 +330,39 @@ const BuyerProfile = () => {
                   {user.email}
                 </div>
 
-                {/* Рейтинг */}
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="flex items-center gap-0.5">
-                    {[...Array(5)].map((_, i) => (
-                      <Star
-                        key={i}
-                        fill={i < Math.floor(userProfile.rating) ? "#eab308" : "rgba(255,255,255,0.4)"}
-                        className={`w-4 h-4 ${
-                          i < Math.floor(userProfile.rating)
-                            ? "text-yellow-500"
-                            : "text-white opacity-40"
-                        }`}
-                        style={
-                          i < Math.floor(userProfile.rating)
-                            ? { 
-                                filter: "drop-shadow(0 2px 4px rgba(234,179,8,0.6)) drop-shadow(0 1px 2px rgba(0,0,0,0.3))"
-                              }
-                            : undefined
-                        }
-                      />
-                    ))}
-                  </div>
-                  <span className="text-white font-bold text-sm">{userProfile.rating}</span>
-                </div>
-                
-                {/* Отзывы */}
-                <div className="text-[#BCCEA9] text-sm mb-3">
-                  {userProfile.reviewsCount} отзывов
-                </div>
+                {/* Рейтинг — только для продавцов */}
+                {isSeller && (
+                  <>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="flex items-center gap-0.5">
+                        {[...Array(5)].map((_, i) => (
+                          <Star
+                            key={i}
+                            fill={i < Math.floor(userProfile.rating) ? "#eab308" : "rgba(255,255,255,0.4)"}
+                            className={`w-4 h-4 ${
+                              i < Math.floor(userProfile.rating)
+                                ? "text-yellow-500"
+                                : "text-white opacity-40"
+                            }`}
+                            style={
+                              i < Math.floor(userProfile.rating)
+                                ? {
+                                    filter: "drop-shadow(0 2px 4px rgba(234,179,8,0.6)) drop-shadow(0 1px 2px rgba(0,0,0,0.3))"
+                                  }
+                                : undefined
+                            }
+                          />
+                        ))}
+                      </div>
+                      <span className="text-white font-bold text-sm">{userProfile.rating}</span>
+                    </div>
 
-                {/* Статус */}
-                {userProfile.status && (
-                  <div className="bg-white/20 backdrop-blur-sm rounded-lg border border-white/30 p-2 px-3 mb-3 w-full">
-                    <p className="text-white leading-tight text-sm">
-                      {userProfile.status}
-                    </p>
-                  </div>
+                    <div className="text-[#BCCEA9] text-sm mb-3">
+                      {userProfile.reviewsCount} отзывов
+                    </div>
+                  </>
                 )}
+
               </div>
 
               {/* Десктопная версия */}
@@ -402,52 +402,39 @@ const BuyerProfile = () => {
                     {user.email}
                   </div>
 
-                  {/* Статус */}
-                  {userProfile.status && (
-                    <div 
-                      className="bg-white/20 backdrop-blur-sm rounded-lg border border-white/30"
-                      style={{
-                        marginTop: 'max(0.5rem, 1.04vw)',
-                        marginBottom: 'max(0.5rem, 1.04vw)',
-                        padding: 'max(0.375rem, 0.52vw) max(0.5rem, 1.04vw)'
-                      }}
-                    >
-                      <p className="text-white leading-tight" style={{ fontSize: 'max(0.75rem, 0.94vw)' }}>
-                        {userProfile.status}
-                      </p>
+
+                  {/* Рейтинг — только для продавцов */}
+                  {isSeller && (
+                    <div className="flex items-center mb-2 md:mb-4" style={{ gap: 'max(0.25rem, 0.52vw)', marginBottom: 'max(0.5rem, 1.25vw)' }}>
+                      <div className="flex items-center gap-0.5">
+                        {[...Array(5)].map((_, i) => (
+                          <Star
+                            key={i}
+                            fill={i < Math.floor(userProfile.rating) ? "#eab308" : "rgba(255,255,255,0.4)"}
+                            className={`w-4 h-4 ${
+                              i < Math.floor(userProfile.rating)
+                                ? "text-yellow-500"
+                                : "text-white opacity-40"
+                            }`}
+                            style={
+                              i < Math.floor(userProfile.rating)
+                                ? {
+                                    filter: "drop-shadow(0 2px 4px rgba(234,179,8,0.6)) drop-shadow(0 1px 2px rgba(0,0,0,0.3))",
+                                    width: 'max(1rem, 1.67vw)',
+                                    height: 'max(1rem, 1.67vw)'
+                                  }
+                                : {
+                                    width: 'max(1rem, 1.67vw)',
+                                    height: 'max(1rem, 1.67vw)'
+                                  }
+                            }
+                          />
+                        ))}
+                      </div>
+                      <span className="text-white font-bold" style={{ fontSize: 'max(0.875rem, 1.04vw)' }}>{userProfile.rating}</span>
+                      <span className="text-[#BCCEA9]" style={{ fontSize: 'max(0.75rem, 0.94vw)' }}>• {userProfile.reviewsCount} отзывов</span>
                     </div>
                   )}
-                  
-                  {/* Рейтинг */}
-                  <div className="flex items-center mb-2 md:mb-4" style={{ gap: 'max(0.25rem, 0.52vw)', marginBottom: 'max(0.5rem, 1.25vw)' }}>
-                    <div className="flex items-center gap-0.5">
-                      {[...Array(5)].map((_, i) => (
-                        <Star
-                          key={i}
-                          fill={i < Math.floor(userProfile.rating) ? "#eab308" : "rgba(255,255,255,0.4)"}
-                          className={`w-4 h-4 ${
-                            i < Math.floor(userProfile.rating)
-                              ? "text-yellow-500"
-                              : "text-white opacity-40"
-                          }`}
-                          style={
-                            i < Math.floor(userProfile.rating)
-                              ? { 
-                                  filter: "drop-shadow(0 2px 4px rgba(234,179,8,0.6)) drop-shadow(0 1px 2px rgba(0,0,0,0.3))",
-                                  width: 'max(1rem, 1.67vw)',
-                                  height: 'max(1rem, 1.67vw)'
-                                }
-                              : {
-                                  width: 'max(1rem, 1.67vw)',
-                                  height: 'max(1rem, 1.67vw)'
-                                }
-                          }
-                        />
-                      ))}
-                    </div>
-                    <span className="text-white font-bold" style={{ fontSize: 'max(0.875rem, 1.04vw)' }}>{userProfile.rating}</span>
-                    <span className="text-[#BCCEA9]" style={{ fontSize: 'max(0.75rem, 0.94vw)' }}>• {userProfile.reviewsCount} отзывов</span>
-                  </div>
                 </div>
               </div>
             </div>
@@ -466,7 +453,7 @@ const BuyerProfile = () => {
             <div className="py-2">
               <ProfileMenuItem icon={MessageCircle} label="Сообщения" />
               <ProfileMenuItem icon={Package} label="Мои заказы" onClick={() => navigate('/orders')} />
-              <ProfileMenuItem icon={MessageSquare} label="Мои отзывы" />
+              <ProfileMenuItem icon={MessageSquare} label="Мои отзывы" onClick={() => navigate('/my-reviews')} />
               <ProfileMenuItem icon={Heart} label="Избранное" />
               <ProfileMenuItem icon={Users} label="Подписки" />
             </div>
@@ -475,7 +462,7 @@ const BuyerProfile = () => {
 
             {/* Настройки и дополнительно */}
             <div className="py-2">
-              <ProfileMenuItem icon={Settings} label="Настройки" />
+              <ProfileMenuItem icon={Settings} label="Настройки" onClick={() => navigate('/settings')} />
 
               {/* Умная кнопка "Стать продавцом" с разными состояниями */}
               {!sellerProfile && !loadingSellerStatus && (

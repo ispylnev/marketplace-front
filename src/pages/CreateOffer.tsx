@@ -382,7 +382,7 @@ const CreateOffer = () => {
 
       await offerService.createOffer(request);
 
-      navigate('/seller/admin', { state: { message: 'Оффер успешно создан и отправлен на модерацию' } });
+      navigate('/seller/admin', { state: { message: 'Оффер создан! Не забудьте отправить его на модерацию, если всё указано верно', section: 'offers' } });
     } catch (err: any) {
       console.error('Ошибка создания оффера:', err);
       setError(err.response?.data?.message || 'Не удалось создать оффер. Попробуйте позже.');
