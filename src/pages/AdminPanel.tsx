@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShoppingBag, Users, FolderTree, BookOpen, LogOut, Loader2, Lock, FileEdit, MessageSquare } from 'lucide-react';
+import { ShoppingBag, Users, FolderTree, BookOpen, LogOut, Loader2, Lock, FileEdit, MessageSquare, AlertTriangle } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Separator } from '../components/ui/separator';
 import { useAuth } from '../contexts/AuthContext';
@@ -8,11 +8,12 @@ import { useToast } from '../contexts/ToastContext';
 import { adminService, OfferForModeration, CategoryResponse, BrandResponse } from '../api/adminService';
 import { moderationService, EditRequestResponse } from '../api/moderationService';
 import { reviewService } from '../api/reviewService';
+import { reportService, ReportResponse } from '../api/reportService';
 import { SellerResponse, SellerStatus } from '../types/seller';
 import { ReviewDto } from '../types/review';
-import { OfferModerationTab, SellerModerationTab, ReviewModerationTab, CategoriesTab, BrandsTab } from '../components/admin';
+import { OfferModerationTab, SellerModerationTab, ReviewModerationTab, ReportsModerationTab, CategoriesTab, BrandsTab } from '../components/admin';
 
-type Section = 'offers' | 'sellers' | 'reviews' | 'categories' | 'brands' | 'editChanges';
+type Section = 'offers' | 'sellers' | 'reviews' | 'reports' | 'categories' | 'brands' | 'editChanges';
 
 export default function AdminPanel() {
   const navigate = useNavigate();
@@ -29,6 +30,7 @@ export default function AdminPanel() {
   const [brands, setBrands] = useState<BrandResponse[]>([]);
   const [editRequests, setEditRequests] = useState<EditRequestResponse[]>([]);
   const [reviews, setReviews] = useState<ReviewDto[]>([]);
+  const [reports, setReports] = useState<ReportResponse[]>([]);
 
   // Load data
   const loadData = useCallback(async () => {
@@ -41,9 +43,10 @@ export default function AdminPanel() {
         adminService.getAllBrands(),
         moderationService.getPendingRequests(),
         reviewService.getPendingReviews(),
+        reportService.getPendingReports(),
       ]);
 
-      const [offersResult, sellersResult, categoriesResult, brandsResult, editRequestsResult, reviewsResult] = results;
+      const [offersResult, sellersResult, categoriesResult, brandsResult, editRequestsResult, reviewsResult, reportsResult] = results;
 
       setOffers(offersResult.status === 'fulfilled' ? offersResult.value : []);
       setSellers(sellersResult.status === 'fulfilled' ? sellersResult.value : []);
@@ -51,6 +54,7 @@ export default function AdminPanel() {
       setBrands(brandsResult.status === 'fulfilled' ? brandsResult.value : []);
       setEditRequests(editRequestsResult.status === 'fulfilled' ? editRequestsResult.value : []);
       setReviews(reviewsResult.status === 'fulfilled' ? reviewsResult.value : []);
+      setReports(reportsResult.status === 'fulfilled' ? reportsResult.value : []);
 
       const failed = results.filter(r => r.status === 'rejected');
       if (failed.length > 0) {
@@ -228,10 +232,34 @@ export default function AdminPanel() {
     }
   };
 
+  // Report handlers
+  const handleApproveReport = async (id: number, comment?: string) => {
+    try {
+      await reportService.approveReport(id, comment);
+      setReports(prev => prev.filter(r => r.id !== id));
+      showSuccess('Жалоба одобрена');
+    } catch (e: any) {
+      showError(e?.response?.data?.message || 'Ошибка одобрения жалобы');
+      throw e;
+    }
+  };
+
+  const handleRejectReport = async (id: number, comment?: string) => {
+    try {
+      await reportService.rejectReport(id, comment);
+      setReports(prev => prev.filter(r => r.id !== id));
+      showSuccess('Жалоба отклонена');
+    } catch (e: any) {
+      showError(e?.response?.data?.message || 'Ошибка отклонения жалобы');
+      throw e;
+    }
+  };
+
   // Stats
   const pendingOffersCount = offers.filter(o => o.status === 'PENDING_REVIEW').length;
   const pendingSellersCount = sellers.filter(s => s.status === SellerStatus.PENDING).length;
   const pendingReviewsCount = reviews.filter(r => r.status === 'PENDING_MODERATION').length;
+  const pendingReportsCount = reports.length;
   const pendingEditRequestsCount = editRequests.length;
 
   // Loading state
@@ -357,6 +385,13 @@ export default function AdminPanel() {
                   badge={pendingReviewsCount}
                 />
                 <NavButton
+                  active={currentSection === 'reports'}
+                  onClick={() => setCurrentSection('reports')}
+                  icon={<AlertTriangle className="w-5 h-5" />}
+                  label="Жалобы"
+                  badge={pendingReportsCount}
+                />
+                <NavButton
                   active={currentSection === 'categories'}
                   onClick={() => setCurrentSection('categories')}
                   icon={<FolderTree className="w-5 h-5" />}
@@ -397,6 +432,7 @@ export default function AdminPanel() {
             pendingOffersCount={pendingOffersCount}
             pendingSellersCount={pendingSellersCount}
             pendingReviewsCount={pendingReviewsCount}
+            pendingReportsCount={pendingReportsCount}
             pendingEditRequestsCount={pendingEditRequestsCount}
             onLogout={handleLogout}
           />
@@ -430,6 +466,13 @@ export default function AdminPanel() {
                     reviews={reviews}
                     onApprove={handleApproveReview}
                     onReject={handleRejectReview}
+                  />
+                )}
+                {currentSection === 'reports' && (
+                  <ReportsModerationTab
+                    reports={reports}
+                    onApprove={handleApproveReport}
+                    onReject={handleRejectReport}
                   />
                 )}
                 {currentSection === 'categories' && (
@@ -503,6 +546,7 @@ function MobileNav({
   pendingOffersCount,
   pendingSellersCount,
   pendingReviewsCount,
+  pendingReportsCount,
   pendingEditRequestsCount,
   onLogout,
 }: {
@@ -511,6 +555,7 @@ function MobileNav({
   pendingOffersCount: number;
   pendingSellersCount: number;
   pendingReviewsCount: number;
+  pendingReportsCount: number;
   pendingEditRequestsCount: number;
   onLogout: () => void;
 }) {
@@ -549,6 +594,13 @@ function MobileNav({
           icon={<MessageSquare className="w-5 h-5" />}
           label="Отзывы"
           badge={pendingReviewsCount}
+        />
+        <MobileNavButton
+          active={currentSection === 'reports'}
+          onClick={() => onSectionChange('reports')}
+          icon={<AlertTriangle className="w-5 h-5" />}
+          label="Жалобы"
+          badge={pendingReportsCount}
         />
         <MobileNavButton
           active={currentSection === 'editChanges'}

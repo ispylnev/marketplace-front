@@ -14,6 +14,7 @@ import { ReviewDto } from '../types/review';
 import { extractId, makeFullSlug } from '../utils/slugUtils';
 import ProductCard from '../components/ProductCard';
 import ReviewCard from '../components/reviews/ReviewCard';
+import ReportDialog from '../components/ReportDialog';
 import profileAvatar from '../assets/c5c335b900c25c01ebdade434d4ee2ee9ce87b4b.png';
 import avatarBackground from '../assets/4068108bae8ada353e34675c0c754fb530d30e98.png';
 
@@ -43,6 +44,9 @@ const SellerProfile = () => {
   const [reviewsPage, setReviewsPage] = useState(0);
   const [hasMoreReviews, setHasMoreReviews] = useState(false);
   const [loadingReviews, setLoadingReviews] = useState(true);
+
+  // Report dialog state
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
 
   useEffect(() => {
     loadSellerProfile();
@@ -106,8 +110,8 @@ const SellerProfile = () => {
         fullSlug: makeFullSlug(hit.title, hit.offerId),
         price: hit.price ? formatPrice(hit.price) : 'Цена не указана',
         image: hit.mainImageUrl || hit.mainImageThumbnailUrl || 'https://via.placeholder.com/300',
-        rating: hit.sellerRating || 0,
-        reviews: 0,
+        rating: hit.averageRating || 0,
+        reviews: hit.reviewCount || 0,
         category: hit.categoryName,
         description: hit.description,
         seller: hit.sellerName ? {
@@ -354,6 +358,7 @@ const SellerProfile = () => {
                 icon={Flag}
                 label="Пожаловаться на профиль"
                 variant="danger"
+                onClick={() => setReportDialogOpen(true)}
               />
             </div>
           </div>
@@ -433,6 +438,15 @@ const SellerProfile = () => {
           </div>
         </div>
       </div>
+
+      {/* Report Dialog */}
+      <ReportDialog
+        entityType="SELLER"
+        entityId={seller.id}
+        entityName={seller.shopName}
+        open={reportDialogOpen}
+        onClose={() => setReportDialogOpen(false)}
+      />
     </div>
   );
 };

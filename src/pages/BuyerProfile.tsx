@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Star, MessageCircle, Package, MessageSquare, Heart, Users, 
+import {
+  Star, MessageCircle, Package, MessageSquare, Heart, Users,
   Settings, FileText, LogOut, Flag, Edit, Camera, Trash2, Upload,
   Store, Clock, AlertCircle, CheckCircle, XCircle
 } from "lucide-react";
+import ReportDialog from "../components/ReportDialog";
 import { ProfileMenuItem } from "../components/ProfileMenuItem";
 import { PlantCollection } from "../components/PlantCollection";
 import Header from "../components/Header";
@@ -64,6 +65,7 @@ const BuyerProfile = () => {
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
 
   useEffect(() => {
     loadUserProfile();
@@ -584,10 +586,11 @@ const BuyerProfile = () => {
 
             {/* Пожаловаться на профиль */}
             <div className="py-2 pb-0">
-              <ProfileMenuItem 
-                icon={Flag} 
-                label="Пожаловаться на профиль" 
+              <ProfileMenuItem
+                icon={Flag}
+                label="Пожаловаться на профиль"
                 variant="danger"
+                onClick={() => setReportDialogOpen(true)}
               />
             </div>
           </div>
@@ -783,6 +786,15 @@ const BuyerProfile = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Диалог жалобы */}
+      <ReportDialog
+        entityType="USER"
+        entityId={user.id}
+        entityName={displayName}
+        open={reportDialogOpen}
+        onClose={() => setReportDialogOpen(false)}
+      />
     </div>
   );
 };

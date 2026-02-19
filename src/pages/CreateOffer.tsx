@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Search, Package, Tag, DollarSign,
   Barcode, Box, ChevronDown, Check, Loader2, AlertCircle,
-  HelpCircle, Leaf, Sun, Droplets, Thermometer
+  HelpCircle, Leaf, Sun, Droplets, Thermometer, X
 } from "lucide-react";
 import Header from "../components/Header";
 import { Button } from "../components/ui/button";
@@ -11,13 +11,13 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
 import { ImageUploader, UploadedImage } from "../components/ImageUploader";
-import { catalogService, CategoryPublic } from '../api/catalogService';
+import { catalogService, CategoryPublic, BrandPublic } from '../api/catalogService';
 import { searchService, CatalogTaxonomyItem, CatalogProductItem } from '../api/searchService';
 import { offerService } from '../api/offerService';
 import { CreateOfferRequest, OfferCondition, CategoryAttribute, OfferAttributeRequest } from '../types/offer';
 import { DynamicField } from '../components/DynamicField';
 import {
-  PLANT_CATEGORY_SLUGS, lightingOptions, wateringOptions,
+  lightingOptions, wateringOptions,
   humidityOptions, difficultyOptions, toxicityOptions
 } from '../constants/plantOptions';
 
@@ -54,6 +54,11 @@ const CreateOffer = () => {
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [useCustomProduct, setUseCustomProduct] = useState(false); // "Другое"
 
+  // Бренд (автокомплит)
+  const [brandQuery, setBrandQuery] = useState('');
+  const [brandSuggestions, setBrandSuggestions] = useState<BrandPublic[]>([]);
+  const [showBrandDropdown, setShowBrandDropdown] = useState(false);
+
   // Изображения
   const [images, setImages] = useState<UploadedImage[]>([]);
 
@@ -62,6 +67,7 @@ const CreateOffer = () => {
     name: string; // Собственное название оффера
     description: string;
     price: string;
+    quantity: string;
     sku: string;
     condition: OfferCondition;
     barcode: string;
@@ -81,6 +87,7 @@ const CreateOffer = () => {
     name: '',
     description: '',
     price: '',
+    quantity: '1',
     sku: '',
     condition: 'NEW',
     barcode: '',
@@ -101,12 +108,8 @@ const CreateOffer = () => {
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   // Проверка - является ли категория растительной
-  // Если выбран таксон — это всегда растение
-  const isPlantCategory = selectedTaxonomy
-    ? true
-    : selectedCategory?.slug
-      ? PLANT_CATEGORY_SLUGS.some(slug => selectedCategory.slug?.includes(slug))
-      : false;
+  // Если выбран таксон — это всегда растение; иначе — флаг isPlant с бэкенда
+  const isPlantCategory = selectedTaxonomy ? true : selectedCategory?.isPlant === true;
 
   // Загрузка категорий при монтировании
   useEffect(() => {
@@ -182,6 +185,25 @@ const CreateOffer = () => {
 
     return () => clearTimeout(timer);
   }, [searchQuery, selectedTaxonomy, selectedProductItem, useCustomProduct]);
+
+  // Поиск брендов с дебаунсом
+  useEffect(() => {
+    if (brandQuery.length < 2) {
+      setBrandSuggestions([]);
+      setShowBrandDropdown(false);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const results = await catalogService.searchBrands(brandQuery);
+        setBrandSuggestions(results);
+        setShowBrandDropdown(true);
+      } catch (err) {
+        console.error('Ошибка поиска брендов:', err);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [brandQuery]);
 
   const searchCatalog = async () => {
     setSearchLoading(true);
@@ -268,7 +290,7 @@ const CreateOffer = () => {
     const errors: Record<string, string> = {};
 
     if (!selectedTaxonomy && !selectedProductItem && !useCustomProduct) {
-      errors.product = 'Выберите товар из каталога или укажите "Другое"';
+      errors.product = 'Выберите товар из каталога или укажите вручную';
     }
 
     // Категория обязательна для "Другое"
@@ -288,9 +310,9 @@ const CreateOffer = () => {
       errors.images = 'Добавьте хотя бы одно фото';
     }
 
-    // Валидация обязательных атрибутов категории
+    // Валидация обязательных атрибутов категории (только видимые)
     categoryAttributes
-      .filter(attr => attr.isRequired)
+      .filter(attr => attr.isVisible !== false && attr.isRequired)
       .forEach(attr => {
         const value = attributeValues[attr.attributeCode];
         if (value === null || value === undefined || value === '') {
@@ -303,7 +325,16 @@ const CreateOffer = () => {
   };
 
   const handleSubmit = async () => {
-    if (!validateForm()) return;
+    if (!validateForm()) {
+      // Скролл к первой ошибке
+      requestAnimationFrame(() => {
+        const firstError = document.querySelector('[data-validation-error]');
+        if (firstError) {
+          firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      });
+      return;
+    }
 
     setSubmitting(true);
     setError(null);
@@ -319,9 +350,11 @@ const CreateOffer = () => {
         productId: selectedProductItem?.id,
         // categoryId только для "Другое" (бэкенд игнорирует для выбранного товара)
         categoryId: useCustomProduct ? selectedCategory?.id : undefined,
+        brandName: brandQuery.trim() || undefined,
         title: formData.name.trim(),
         description: formData.description.trim() || undefined,
         price: parseFloat(formData.price),
+        initialQuantity: parseInt(formData.quantity) || 1,
         sku: '', // Генерируется автоматически на бэкенде
         condition: formData.condition,
         barcode: formData.barcode.trim() || undefined,
@@ -353,6 +386,7 @@ const CreateOffer = () => {
         const attrs: OfferAttributeRequest[] = [];
 
         for (const attr of categoryAttributes) {
+          if (attr.isVisible === false) continue;
           const value = attributeValues[attr.attributeCode];
           if (value === null || value === undefined || value === '') continue;
 
@@ -544,7 +578,7 @@ const CreateOffer = () => {
                     </>
                   )}
 
-                  {/* Опция "Другое" */}
+                  {/* Опция "Моего товара нет в каталоге" */}
                   <button
                     onClick={handleSelectOther}
                     className="w-full px-4 py-3 text-left hover:bg-amber-50 transition-colors flex items-start gap-3 bg-amber-50/50 border-t-2 border-amber-200"
@@ -553,9 +587,9 @@ const CreateOffer = () => {
                       <HelpCircle className="w-6 h-6 text-amber-600" />
                     </div>
                     <div className="flex-1">
-                      <p className="font-medium text-amber-800">Не нашли нужный товар?</p>
+                      <p className="font-medium text-amber-800">Моего товара нет в каталоге</p>
                       <p className="text-sm text-amber-700">
-                        Выберите "Другое" и опишите товар вручную
+                        Опишите товар вручную и выберите категорию
                       </p>
                     </div>
                   </button>
@@ -571,7 +605,7 @@ const CreateOffer = () => {
                   >
                     <HelpCircle className="w-5 h-5 text-amber-600" />
                     <div className="text-left">
-                      <p className="font-medium text-amber-800">Выбрать "Другое"</p>
+                      <p className="font-medium text-amber-800">Моего товара нет в каталоге</p>
                       <p className="text-sm text-amber-700">Опишите товар вручную</p>
                     </div>
                   </button>
@@ -579,7 +613,7 @@ const CreateOffer = () => {
               )}
 
               {validationErrors.product && (
-                <p className="text-red-600 text-sm mt-1">{validationErrors.product}</p>
+                <p data-validation-error className="text-red-600 text-sm mt-1">{validationErrors.product}</p>
               )}
             </div>
 
@@ -727,7 +761,7 @@ const CreateOffer = () => {
                         )}
                       </div>
                       {validationErrors.category && (
-                        <p className="text-red-600 text-sm mt-1">{validationErrors.category}</p>
+                        <p data-validation-error className="text-red-600 text-sm mt-1">{validationErrors.category}</p>
                       )}
                     </div>
                   </div>
@@ -751,7 +785,7 @@ const CreateOffer = () => {
                 <HelpCircle className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
                 <p className="text-sm text-blue-700">
                   Начните вводить название и выберите подходящий вариант из каталога.
-                  Если нужного товара нет — выберите "Другое".
+                  Если нужного товара нет — нажмите «Моего товара нет в каталоге».
                 </p>
               </div>
             )}
@@ -778,7 +812,7 @@ const CreateOffer = () => {
                 disabled={!canProceedToDetails}
               />
               {validationErrors.images && (
-                <p className="text-red-600 text-sm mt-2">{validationErrors.images}</p>
+                <p data-validation-error className="text-red-600 text-sm mt-2">{validationErrors.images}</p>
               )}
             </div>
           </div>
@@ -813,7 +847,7 @@ const CreateOffer = () => {
                   Это название увидят покупатели. Укажите важные характеристики.
                 </p>
                 {validationErrors.name && (
-                  <p className="text-red-600 text-sm mt-1">{validationErrors.name}</p>
+                  <p data-validation-error className="text-red-600 text-sm mt-1">{validationErrors.name}</p>
                 )}
               </div>
 
@@ -828,6 +862,57 @@ const CreateOffer = () => {
                   rows={4}
                   maxLength={2000}
                 />
+              </div>
+
+              {/* Бренд (автокомплит) */}
+              <div>
+                <Label className="flex items-center gap-2 mb-2">
+                  <Tag className="w-4 h-4 text-[#2B4A39]" />
+                  Бренд
+                </Label>
+                <div className="relative">
+                  <Input
+                    type="text"
+                    placeholder="Введите название бренда"
+                    value={brandQuery}
+                    onChange={(e) => {
+                      setBrandQuery(e.target.value);
+                      if (e.target.value.length < 2) setShowBrandDropdown(false);
+                    }}
+                    onFocus={() => brandSuggestions.length > 0 && brandQuery.length >= 2 && setShowBrandDropdown(true)}
+                    maxLength={255}
+                    className="pr-8"
+                  />
+                  {brandQuery && (
+                    <button
+                      type="button"
+                      onClick={() => { setBrandQuery(''); setBrandSuggestions([]); setShowBrandDropdown(false); }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-[#2D2E30]/40 hover:text-[#2D2E30]/70 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+
+                  {showBrandDropdown && brandSuggestions.length > 0 && (
+                    <div className="absolute z-20 w-full mt-1 bg-white border border-[#2D2E30]/20 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {brandSuggestions.map((brand) => (
+                        <button
+                          key={brand.id}
+                          onClick={() => {
+                            setBrandQuery(brand.name);
+                            setShowBrandDropdown(false);
+                          }}
+                          className="w-full px-4 py-2.5 text-left hover:bg-[#BCCEA9]/20 transition-colors flex items-center gap-2 border-b border-[#2D2E30]/5 last:border-b-0"
+                        >
+                          <span className="font-medium text-[#2D2E30]">{brand.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-[#2D2E30]/50 mt-1">
+                  Начните вводить — выберите из списка или укажите новый бренд
+                </p>
               </div>
             </div>
           </div>
@@ -969,8 +1054,13 @@ const CreateOffer = () => {
             </div>
           )}
 
-          {/* Динамические атрибуты категории */}
-          {canProceedToDetails && categoryAttributes.length > 0 && (
+          {/* Динамические атрибуты категории (care-атрибуты фильтруются для растений — они уже на шаге 4) */}
+          {canProceedToDetails && (() => {
+            const visibleAttributes = categoryAttributes.filter(a => a.isVisible !== false);
+            const filteredAttributes = isPlantCategory
+              ? visibleAttributes.filter(a => a.attributeGroup !== 'care')
+              : visibleAttributes;
+            return filteredAttributes.length > 0 && (
             <div className="bg-white rounded-xl shadow-sm p-5 md:p-6">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-8 h-8 rounded-full bg-[#2B4A39] text-white flex items-center justify-center text-sm font-semibold">
@@ -992,7 +1082,7 @@ const CreateOffer = () => {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {categoryAttributes.map(attr => (
+                  {filteredAttributes.map(attr => (
                     <DynamicField
                       key={attr.attributeCode}
                       attribute={attr}
@@ -1004,7 +1094,8 @@ const CreateOffer = () => {
                 </div>
               )}
             </div>
-          )}
+          );
+          })()}
 
           {/* Шаг 5: Условия продажи */}
           <div className="bg-white rounded-xl shadow-sm p-5 md:p-6">
@@ -1020,7 +1111,7 @@ const CreateOffer = () => {
             </div>
 
             <div className={`space-y-5 ${!canProceedToDetails && 'opacity-50 pointer-events-none'}`}>
-              {/* Цена и артикул */}
+              {/* Цена и количество */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label className="flex items-center gap-2 mb-2">
@@ -1040,10 +1131,27 @@ const CreateOffer = () => {
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#2D2E30]/50">₽</span>
                   </div>
                   {validationErrors.price && (
-                    <p className="text-red-600 text-sm mt-1">{validationErrors.price}</p>
+                    <p data-validation-error className="text-red-600 text-sm mt-1">{validationErrors.price}</p>
                   )}
                 </div>
 
+                <div>
+                  <Label className="flex items-center gap-2 mb-2">
+                    <Package className="w-4 h-4 text-[#2B4A39]" />
+                    Количество на складе
+                  </Label>
+                  <Input
+                    type="number"
+                    placeholder="1"
+                    value={formData.quantity}
+                    onChange={(e) => handleFormChange('quantity', e.target.value)}
+                    min="1"
+                    step="1"
+                  />
+                  <p className="text-xs text-[#2D2E30]/50 mt-1">
+                    Начальное количество товара в наличии
+                  </p>
+                </div>
               </div>
 
               {/* Состояние */}
@@ -1140,6 +1248,21 @@ const CreateOffer = () => {
               </div>
             </div>
           </div>
+
+          {/* Ошибки валидации (сводка у кнопки) */}
+          {Object.keys(validationErrors).length > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-red-800 text-sm">Заполните обязательные поля:</p>
+                <ul className="mt-1 space-y-0.5">
+                  {Object.values(validationErrors).map((msg, i) => (
+                    <li key={i} className="text-red-600 text-sm">• {msg}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
 
           {/* Кнопка отправки */}
           <div className="flex justify-end gap-3">

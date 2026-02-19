@@ -3,8 +3,6 @@
  * Значения соответствуют backend enum-ам: LightRequirement, WateringFrequency и т.д.
  */
 
-export const PLANT_CATEGORY_SLUGS = ['plants', 'indoor-plants', 'outdoor-plants', 'succulents', 'cacti'];
-
 export const lightingOptions = [
   { value: 'LOW_LIGHT', label: 'Тень' },
   { value: 'SHADE', label: 'Полутень' },

@@ -19,7 +19,7 @@ import {
   OfferImageResponse, CategoryAttribute, OfferAttributeRequest
 } from '../types/offer';
 import {
-  PLANT_CATEGORY_SLUGS, lightingOptions, wateringOptions,
+  lightingOptions, wateringOptions,
   humidityOptions, difficultyOptions, toxicityOptions
 } from '../constants/plantOptions';
 
@@ -47,6 +47,7 @@ const EditOffer = () => {
   const [categoryAttributes, setCategoryAttributes] = useState<CategoryAttribute[]>([]);
   const [attributeValues, setAttributeValues] = useState<Record<string, string | number | boolean | null>>({});
   const [attributesLoading, setAttributesLoading] = useState(false);
+  const [categoryIsPlant, setCategoryIsPlant] = useState(false);
 
   // Форма редактирования
   const [formData, setFormData] = useState({
@@ -77,11 +78,7 @@ const EditOffer = () => {
   const isFieldPending = (fieldName: string) => !!pendingFields[fieldName];
 
   // Определяем является ли категория растительной
-  const isPlantCategory = offer?.taxonomyId
-    ? true
-    : offer?.categorySlug
-      ? PLANT_CATEGORY_SLUGS.some(slug => offer.categorySlug?.includes(slug))
-      : false;
+  const isPlantCategory = offer?.taxonomyId ? true : categoryIsPlant;
 
   useEffect(() => {
     if (offerId) {
@@ -123,8 +120,14 @@ const EditOffer = () => {
       // Загружаем изображения
       loadImages(offerId);
 
-      // Загружаем атрибуты категории и предзаполняем значения
+      // Загружаем категорию и её атрибуты
       if (data.categoryId) {
+        try {
+          const cat = await catalogService.getCategoryById(data.categoryId);
+          setCategoryIsPlant(cat.isPlant === true);
+        } catch (e) {
+          console.error('Ошибка загрузки категории:', e);
+        }
         loadCategoryAttributes(data.categoryId, data.attributes);
       }
     } catch (err: any) {
@@ -699,8 +702,13 @@ const EditOffer = () => {
             </div>
           )}
 
-          {/* Динамические атрибуты категории */}
-          {categoryAttributes.length > 0 && (
+          {/* Динамические атрибуты категории (care-атрибуты фильтруются для растений) */}
+          {(() => {
+            const visibleAttributes = categoryAttributes.filter(a => a.isVisible !== false);
+            const filteredAttributes = isPlantCategory
+              ? visibleAttributes.filter(a => a.attributeGroup !== 'care')
+              : visibleAttributes;
+            return filteredAttributes.length > 0 && (
             <div className="bg-white rounded-xl p-6 shadow-sm">
               <h2 className="text-lg font-semibold text-[#2B4A39] mb-4 flex items-center gap-2">
                 <Tag className="w-5 h-5" />
@@ -718,7 +726,7 @@ const EditOffer = () => {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {categoryAttributes.map(attr => (
+                  {filteredAttributes.map(attr => (
                     <DynamicField
                       key={attr.attributeCode}
                       attribute={attr}
@@ -729,7 +737,8 @@ const EditOffer = () => {
                 </div>
               )}
             </div>
-          )}
+          );
+          })()}
 
           {/* Цена */}
           <div className="bg-white rounded-xl p-6 shadow-sm">

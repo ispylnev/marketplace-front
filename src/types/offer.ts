@@ -104,6 +104,14 @@ export interface OfferAttributeResponse {
   id: number;
   offerId: number;
   attributeCode: string;
+  /** Название атрибута для отображения (из CategoryAttribute) */
+  attributeName?: string;
+  /** Тип атрибута (STRING, NUMBER, BOOLEAN, ENUM, DATE) */
+  attributeType?: string;
+  /** Единица измерения */
+  unit?: string;
+  /** Подписи для ENUM значений */
+  enumLabels?: Record<string, string>;
   valueString?: string;
   valueNumber?: number;
   valueBoolean?: boolean;
@@ -134,6 +142,8 @@ export interface CreateOfferRequest {
   taxonomyId?: number;
   /** ID категории. Обязательно только для "Другое" (когда productId и taxonomyId не указаны) */
   categoryId?: number;
+  /** Название бренда. Backend делает upsert: находит существующий или создаёт новый */
+  brandName?: string;
   /** Название оффера (отображается покупателям) */
   title?: string;
   /** Описание оффера */
@@ -148,6 +158,8 @@ export interface CreateOfferRequest {
   sku: string;
   /** Штрихкод товара */
   barcode?: string;
+  /** Начальное количество на складе (по умолчанию 1) */
+  initialQuantity?: number;
   /** Время обработки заказа в днях */
   handlingTimeDays?: number;
   /** Гарантия в месяцах */
@@ -228,6 +240,13 @@ export interface OfferResponse {
   description?: string;
   /** Латинское (научное) название растения */
   latinName?: string;
+
+  // === Бренд ===
+
+  /** ID бренда */
+  brandId?: number;
+  /** Название бренда */
+  brandName?: string;
 
   // === Категория и таксономия ===
 

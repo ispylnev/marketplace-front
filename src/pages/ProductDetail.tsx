@@ -1,5 +1,5 @@
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Heart, ShoppingCart, Truck, Shield, Loader2, X, ChevronLeft, ChevronRight, ZoomIn, Sun, Droplets, Wind, Thermometer, Leaf, AlertTriangle, Package, Check, Store, Star, ChevronRight as ChevronRightSmall, Minus, Plus, AlertCircle, MessageSquare } from 'lucide-react';
+import { Heart, ShoppingCart, Truck, Shield, Loader2, X, ChevronLeft, ChevronRight, ZoomIn, Sun, Droplets, Wind, Thermometer, Leaf, AlertTriangle, Package, Check, Store, Star, ChevronRight as ChevronRightSmall, Minus, Plus, AlertCircle, MessageSquare, Flag } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { extractId } from '../utils/slugUtils';
@@ -12,6 +12,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { OfferResponse, OfferImageResponse } from '../types/offer';
 import { SellerResponse } from '../types/seller';
 import ReviewList from '../components/reviews/ReviewList';
+import ReportDialog from '../components/ReportDialog';
 
 function pluralize(n: number, one: string, few: string, many: string): string {
   const abs = Math.abs(n);
@@ -51,6 +52,9 @@ const ProductDetail = () => {
   const [isAddingToCart, setIsAddingToCart] = useState(false);
   const [isAdded, setIsAdded] = useState(false);
   const [cartError, setCartError] = useState<string | null>(null);
+
+  // Report dialog state
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
 
   // Auto-scroll к отзывам при #reviews в URL
   useEffect(() => {
@@ -278,18 +282,47 @@ const ProductDetail = () => {
     return translations[category]?.[value] || value;
   };
 
-  const attributeNames: Record<string, string> = {
-    'material': 'Материал', 'handle_material': 'Материал ручки', 'handle_length': 'Длина ручки',
-    'weight': 'Вес', 'diameter': 'Диаметр', 'height': 'Высота', 'volume': 'Объём',
-    'has_drainage': 'Дренаж', 'color': 'Цвет', 'brand': 'Бренд', 'country': 'Страна',
-  };
+  const getAttributeName = (attr: { attributeName?: string; attributeCode: string }): string =>
+    attr.attributeName || attr.attributeCode.replace(/_/g, ' ');
 
-  const getAttributeName = (code: string): string => attributeNames[code] || code.replace(/_/g, ' ');
-
-  const formatAttributeValue = (attr: { valueString?: string; valueNumber?: number; valueBoolean?: boolean }): string => {
-    if (attr.valueBoolean !== undefined) return attr.valueBoolean ? 'Да' : 'Нет';
-    if (attr.valueNumber !== undefined) return String(attr.valueNumber);
-    return attr.valueString || '—';
+  const formatAttributeValue = (attr: {
+    attributeType?: string;
+    valueString?: string;
+    valueNumber?: number;
+    valueBoolean?: boolean;
+    unit?: string;
+    enumLabels?: Record<string, string>;
+  }): string => {
+    // Используем attributeType если доступен (приоритет)
+    if (attr.attributeType === 'BOOLEAN') {
+      if (attr.valueBoolean === undefined || attr.valueBoolean === null) return '—';
+      return attr.valueBoolean ? 'Да' : 'Нет';
+    }
+    if (attr.attributeType === 'NUMBER') {
+      if (attr.valueNumber === undefined || attr.valueNumber === null) return '—';
+      return attr.unit ? `${attr.valueNumber} ${attr.unit}` : String(attr.valueNumber);
+    }
+    if (attr.attributeType === 'ENUM' || attr.attributeType === 'STRING' || attr.attributeType === 'DATE') {
+      if (attr.valueString === undefined || attr.valueString === null) return '—';
+      if (attr.enumLabels && attr.enumLabels[attr.valueString]) {
+        return attr.enumLabels[attr.valueString];
+      }
+      return attr.valueString;
+    }
+    // Fallback: определяем по значениям (если attributeType отсутствует)
+    if (attr.valueBoolean !== undefined && attr.valueBoolean !== null) {
+      return attr.valueBoolean ? 'Да' : 'Нет';
+    }
+    if (attr.valueNumber !== undefined && attr.valueNumber !== null) {
+      return attr.unit ? `${attr.valueNumber} ${attr.unit}` : String(attr.valueNumber);
+    }
+    if (attr.valueString !== undefined && attr.valueString !== null) {
+      if (attr.enumLabels && attr.enumLabels[attr.valueString]) {
+        return attr.enumLabels[attr.valueString];
+      }
+      return attr.valueString;
+    }
+    return '—';
   };
 
   if (loading) {
@@ -395,6 +428,13 @@ const ProductDetail = () => {
                 >
                   <Heart className={`w-5 h-5 ${isAuthenticated && offer && isFavorited(offer.id) ? 'fill-red-500 text-red-500' : ''}`} />
                   <span className="text-sm">{isAuthenticated && offer && isFavorited(offer.id) ? 'В избранном' : 'В избранное'}</span>
+                </button>
+                <button
+                  onClick={() => setReportDialogOpen(true)}
+                  className="flex items-center gap-2 text-gray-600 hover:text-red-600 transition-colors"
+                >
+                  <Flag className="w-5 h-5" />
+                  <span className="text-sm">Пожаловаться</span>
                 </button>
               </div>
             </div>
@@ -523,7 +563,7 @@ const ProductDetail = () => {
                   <div className="space-y-2">
                     {offer.attributes.map((attr) => (
                       <div key={attr.id} className="flex justify-between py-2 border-b border-gray-100 last:border-0">
-                        <span className="text-gray-500 text-sm">{getAttributeName(attr.attributeCode)}</span>
+                        <span className="text-gray-500 text-sm">{getAttributeName(attr)}</span>
                         <span className="text-gray-900 text-sm font-medium">{formatAttributeValue(attr)}</span>
                       </div>
                     ))}
@@ -778,6 +818,17 @@ const ProductDetail = () => {
             </div>
           )}
         </div>
+      )}
+
+      {/* Report Dialog */}
+      {offer && (
+        <ReportDialog
+          entityType="OFFER"
+          entityId={offer.id}
+          entityName={displayTitle}
+          open={reportDialogOpen}
+          onClose={() => setReportDialogOpen(false)}
+        />
       )}
     </div>
   );

@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { User, Store, MessageSquare } from 'lucide-react';
+import { User, Store, MessageSquare, Flag } from 'lucide-react';
 import StarRating from './StarRating';
 import ReviewImageGallery from './ReviewImageGallery';
+import ReportDialog from '../ReportDialog';
 import { ReviewDto } from '../../types/review';
 
 interface ReviewCardProps {
@@ -19,6 +20,7 @@ const ReviewCard = ({
 }: ReviewCardProps) => {
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryIndex, setGalleryIndex] = useState(0);
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('ru-RU', {
@@ -43,7 +45,16 @@ const ReviewCard = ({
             <p className="text-xs text-gray-400">{formatDate(review.createdAt)}</p>
           </div>
         </div>
-        <StarRating rating={review.rating} size="sm" />
+        <div className="flex items-center gap-2">
+          <StarRating rating={review.rating} size="sm" />
+          <button
+            onClick={() => setReportDialogOpen(true)}
+            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            title="Пожаловаться"
+          >
+            <Flag className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
       {/* Comment */}
@@ -101,6 +112,15 @@ const ReviewCard = ({
           onClose={() => setGalleryOpen(false)}
         />
       )}
+
+      {/* Report Dialog */}
+      <ReportDialog
+        entityType="REVIEW"
+        entityId={review.id}
+        entityName={`Отзыв от ${review.buyerDisplayName || 'Покупатель'}`}
+        open={reportDialogOpen}
+        onClose={() => setReportDialogOpen(false)}
+      />
     </div>
   );
 };

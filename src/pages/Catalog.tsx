@@ -141,8 +141,8 @@ const Catalog = () => {
         fullSlug: makeFullSlug(hit.title, hit.offerId),
         price: hit.price ? formatPrice(hit.price) : 'Цена не указана',
         image: hit.mainImageUrl || hit.mainImageThumbnailUrl || 'https://via.placeholder.com/300',
-        rating: hit.sellerRating || 0,
-        reviews: 0,
+        rating: hit.averageRating || 0,
+        reviews: hit.reviewCount || 0,
         category: hit.categoryName,
         description: hit.description,
         seller: hit.sellerName ? {

@@ -161,6 +161,10 @@ export interface OfferHit {
   sellerName?: string;
   sellerRating?: number;
 
+  // Рейтинг оффера
+  averageRating?: number;
+  reviewCount?: number;
+
   score?: number;
 }
 

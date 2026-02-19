@@ -17,6 +17,7 @@ export interface CategoryPublic {
   sortOrder?: number;
   isActive: boolean;
   categoryType?: string;
+  isPlant?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -43,6 +44,15 @@ export interface ProductPublic {
   offerCount: number;
   createdAt: string;
   updatedAt: string;
+}
+
+// Бренд для публичного отображения
+export interface BrandPublic {
+  id: number;
+  name: string;
+  slug: string;
+  logoUrl?: string;
+  active: boolean;
 }
 
 export const catalogService = {
@@ -138,6 +148,18 @@ export const catalogService = {
    */
   async getCategoryAttributes(categoryId: number): Promise<CategoryAttribute[]> {
     const response = await apiClient.get<CategoryAttribute[]>(`/api/categories/${categoryId}/attributes`);
+    return response.data;
+  },
+
+  // ==================== Бренды ====================
+
+  /**
+   * Поиск брендов по названию (автокомплит)
+   */
+  async searchBrands(query: string, limit = 10): Promise<BrandPublic[]> {
+    const response = await apiClient.get<BrandPublic[]>('/api/brands/search', {
+      params: { q: query, limit },
+    });
     return response.data;
   },
 };
